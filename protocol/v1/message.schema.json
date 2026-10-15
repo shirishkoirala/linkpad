@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/linkpad/protocol/v1/message.schema.json",
+  "title": "Linkpad v1 message",
+  "type": "object",
+  "required": [
+    "version",
+    "type"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "enum": [
+        "hello",
+        "pair",
+        "ready",
+        "pointer",
+        "key",
+        "ack",
+        "error"
+      ]
+    },
+    "token": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dx": {
+      "type": "integer",
+      "minimum": -500,
+      "maximum": 500
+    },
+    "dy": {
+      "type": "integer",
+      "minimum": -500,
+      "maximum": 500
+    },
+    "button": {
+      "enum": [
+        "",
+        "left",
+        "right"
+      ]
+    },
+    "key": {
+      "enum": [
+        "up",
+        "down",
+        "left",
+        "right"
+      ]
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "pair"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "token"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "error"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+name: linkpad_controller
+description: Local network touchpad controller for Linkpad.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ^3.8.0
+dependencies:
+  flutter:
+    sdk: flutter
+  basic_utils: ^5.8.2
+  crypto: ^3.0.6
+  flutter_secure_storage: ^9.2.4
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
