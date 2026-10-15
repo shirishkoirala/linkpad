@@ -4,6 +4,10 @@ package pointer
 
 import "fmt"
 
+func nativeKeyboard(key, text string, modifiers []string) error {
+	return fmt.Errorf("keyboard backend unavailable on this platform/build")
+}
+
 func Available() bool { return false }
 func AvailabilityError() error {
 	return fmt.Errorf("desktop input is unavailable on this platform/build")

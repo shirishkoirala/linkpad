@@ -3,6 +3,7 @@ import 'dart:convert';
 const pointerCapability = 'pointer.v1';
 const scrollCapability = 'scroll.v1';
 const keyCapability = 'key.v1';
+const keyboardCapability = 'keyboard.v1';
 
 List<String> readyCapabilities(Map<String, dynamic> message) {
   // The Go desktop omits this field when no capabilities are available.
@@ -18,7 +19,12 @@ String hello(String token) => jsonEncode({
   'version': 1,
   'type': token.isEmpty ? 'hello' : 'pair',
   if (token.isNotEmpty) 'token': token,
-  'capabilities': [pointerCapability, scrollCapability, keyCapability],
+  'capabilities': [
+    pointerCapability,
+    scrollCapability,
+    keyCapability,
+    keyboardCapability,
+  ],
 });
 
 String pointer(int dx, int dy, [String? button]) {

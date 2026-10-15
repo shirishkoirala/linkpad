@@ -115,6 +115,32 @@ void main() {
   });
 
   test(
+    'keyboard input is queued in order until each acknowledgement',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canKeyboard);
+      expect(peer.typeText('h'), isTrue);
+      expect(peer.typeText('i'), isTrue);
+      expect(peer.keyboardKey('c', modifiers: {'super'}), isTrue);
+      await waitFor(
+        peer,
+        () => received.where((m) => m['type'] == 'keyboard').length == 3,
+      );
+      final events = received.where((m) => m['type'] == 'keyboard').toList();
+      expect(events.map((m) => m['text'] ?? m['key']), ['h', 'i', 'c']);
+      expect(events.last['modifiers'], ['super']);
+      peer.disconnect();
+      expect(peer.typeText('x'), isFalse);
+    },
+  );
+
+  test(
     'mutual TLS, exact pin, pairing and acknowledged pointer input',
     () async {
       var paired = false;

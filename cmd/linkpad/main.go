@@ -117,6 +117,7 @@ func run() error {
 			registry[protocol.Pointer] = pointer.Backend{}
 			registry[protocol.Scroll] = pointer.ScrollBackend{}
 			registry[protocol.Key] = pointer.KeyBackend{}
+			registry[protocol.Keyboard] = pointer.KeyboardBackend{}
 		} else {
 			log.Printf("Desktop input unavailable: %v", pointer.AvailabilityError())
 		}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:basic_utils/basic_utils.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'input_buffer.dart';
 import 'protocol.dart';
+import 'keyboard_protocol.dart';
 
 String generateIdentity() {
   final pair = CryptoUtils.generateEcKeyPair();
@@ -59,6 +61,7 @@ class PeerClient extends ChangeNotifier {
   static const storage = FlutterSecureStorage();
   final PeerTiming timing;
   final InputBuffer _input;
+  final _commands = Queue<({String message, Duration created})>();
   final _clock = Stopwatch()..start();
   Future<SecurityContext>? _identityFuture;
   WebSocket? _socket;
@@ -73,6 +76,7 @@ class PeerClient extends ChangeNotifier {
   bool _desired = false, _foreground = true, _canRetry = false;
   bool _hadConnected = false, _pointer = false, _pending = false;
   bool _scroll = false, _keys = false;
+  bool _keyboard = false;
   bool _stalled = false, _disposed = false;
   Duration _pendingSince = Duration.zero;
   String _message = '';
@@ -83,6 +87,9 @@ class PeerClient extends ChangeNotifier {
   bool get ready => connected && _pointer && !_stalled;
   bool get canScroll => connected && _scroll && !_stalled;
   bool get canKey => connected && _keys && !_stalled;
+  bool get canKeyboard => connected && _keyboard && !_stalled;
+  bool get supportsKeyboard => _keyboard;
+  String get desktopName => _address?.host ?? 'Your computer';
   bool get busy =>
       state == PeerState.connecting ||
       state == PeerState.reconnecting ||
@@ -263,7 +270,7 @@ class PeerClient extends ChangeNotifier {
           'capability not negotiated' =>
             'Input was not enabled for this connection. Enable input on the desktop server and reconnect.',
           _ =>
-            'Desktop rejected the request. Check the Mac server and reconnect.',
+            'Desktop rejected the request. Check the desktop server and reconnect.',
         });
       } else if (message['type'] == 'ready' && !connected) {
         final capabilities = readyCapabilities(message);
@@ -271,6 +278,7 @@ class PeerClient extends ChangeNotifier {
         _pointer = capabilities.contains(pointerCapability);
         _scroll = capabilities.contains(scrollCapability);
         _keys = capabilities.contains(keyCapability);
+        _keyboard = capabilities.contains(keyboardCapability);
         _hadConnected = true;
         _canRetry = true;
         _retryAttempt = 0;
@@ -339,20 +347,52 @@ class PeerClient extends ChangeNotifier {
 
   void pressKey(String key) {
     if (!canKey) return;
-    // ponytail: keys bypass the motion buffer; one ack-gated send like heartbeat.
-    _send(keyMessage(key));
+    _queueCommand(keyMessage(key));
+  }
+
+  bool typeText(String text) {
+    if (!canKeyboard) return false;
+    return _queueCommand(keyboardMessage(text: text));
+  }
+
+  bool keyboardKey(String key, {Set<String> modifiers = const {}}) {
+    if (!canKeyboard) return false;
+    return _queueCommand(keyboardMessage(key: key, modifiers: modifiers));
+  }
+
+  bool _queueCommand(String message) {
+    _expireCommands();
+    if (_commands.length >= 32) return false;
+    _commands.add((message: message, created: _clock.elapsed));
+    _scheduleInput();
+    return true;
+  }
+
+  void _expireCommands() {
+    while (_commands.isNotEmpty &&
+        _clock.elapsed - _commands.first.created >= timing.inputMaxAge) {
+      _commands.removeFirst();
+    }
   }
 
   void _scheduleInput() {
-    if (!ready ||
+    _expireCommands();
+    if (!connected ||
+        _stalled ||
         _pending ||
         _frame != null ||
-        !_input.hasReady(_clock.elapsed)) {
+        (_commands.isEmpty && (!ready || !_input.hasReady(_clock.elapsed)))) {
       return;
     }
     _frame = Timer(timing.frameInterval, () {
       _frame = null;
-      if (!ready || _pending) return;
+      if (!connected || _stalled || _pending) return;
+      _expireCommands();
+      if (_commands.isNotEmpty) {
+        _send(_commands.removeFirst().message);
+        return;
+      }
+      if (!ready) return;
       final input = _input.take(_clock.elapsed);
       if (input != null) {
         _send(
@@ -451,6 +491,8 @@ class PeerClient extends ChangeNotifier {
     _http = null;
     _pending = _stalled = _pointer = false;
     _scroll = _keys = false;
+    _keyboard = false;
+    _commands.clear();
     _input.clear();
   }
 

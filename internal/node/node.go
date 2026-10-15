@@ -149,6 +149,9 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 		case "key":
 			capability = protocol.Key
 			err = m.ValidateKey()
+		case "keyboard":
+			capability = protocol.Keyboard
+			err = m.ValidateKeyboard()
 		}
 		if capability == "" || !protocol.Has(negotiated, capability) {
 			reject("capability not negotiated")

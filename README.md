@@ -81,7 +81,9 @@ On the same reachable LAN, enter `wss://DESKTOP-LAN-IP:4747/ws`, the verified 64
 
 ## Linux X11 desktop control
 
-The Linux x86_64 executable supports mouse movement, left/right click, two-finger wheel scrolling and D-pad arrow keys through the XTEST extension. It is statically linked and does not require `xdotool`, root, `/dev/uinput`, or disabling X server access control.
+The Linux x86_64 executable supports mouse movement, left/right click, two-finger wheel scrolling, D-pad arrow keys, and keyboard text/shortcuts through the XTEST extension. It is statically linked and does not require `xdotool`, root, `/dev/uinput`, or disabling X server access control. Keyboard characters must be available in the active X11 keyboard layout.
+
+The mobile Control deck keeps a full touchpad above click and arrow controls. Tap **Keyboard** to open the QWERTY keyboard beneath a smaller touchpad. Shift, Ctrl, Alt, and Super apply to the next key only; Super maps to Command on macOS. **Gestures** shows the touch controls. The app follows the phone's light/dark appearance, and manual pairing details are under **Enter pairing details**. Update the desktop server as well as the phone app to enable the negotiated `keyboard.v1` capability; older servers still support the existing pointer and arrow controls.
 
 Run from a terminal inside the logged-in X11 desktop session, as that same user:
 

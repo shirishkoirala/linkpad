@@ -5,6 +5,15 @@ import "example.org/linkpad/internal/protocol"
 type Backend struct{}
 type ScrollBackend struct{}
 type KeyBackend struct{}
+type KeyboardBackend struct{}
+
+func (KeyboardBackend) Capability() string { return protocol.Keyboard }
+func (KeyboardBackend) Handle(m protocol.Message) error {
+	if err := m.ValidateKeyboard(); err != nil {
+		return err
+	}
+	return nativeKeyboard(m.Key, m.Text, m.Modifiers)
+}
 
 func (KeyBackend) Capability() string { return protocol.Key }
 func (KeyBackend) Handle(m protocol.Message) error {

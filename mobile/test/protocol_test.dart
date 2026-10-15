@@ -31,7 +31,7 @@ void main() {
       'version': 1,
       'type': 'pair',
       'token': 'secret',
-      'capabilities': ['pointer.v1', 'scroll.v1', 'key.v1'],
+      'capabilities': ['pointer.v1', 'scroll.v1', 'key.v1', 'keyboard.v1'],
     });
     expect(jsonDecode(hello(''))['type'], 'hello');
   });

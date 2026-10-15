@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'peer_client.dart';
-import 'relative_touchpad.dart';
+import 'control_deck.dart';
 import 'pairing_invitation.dart';
 import 'pairing_scanner.dart';
 
@@ -12,11 +12,9 @@ class LinkpadApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Linkpad',
-    theme: ThemeData(
-      colorSchemeSeed: const Color(0xff256b62),
-      brightness: Brightness.dark,
-      useMaterial3: true,
-    ),
+    debugShowCheckedModeBanner: false,
+    theme: linkpadTheme(Brightness.light),
+    darkTheme: linkpadTheme(Brightness.dark),
     home: const ControllerPage(),
   );
 }
@@ -34,6 +32,7 @@ class _ControllerPageState extends State<ControllerPage>
   final pin = TextEditingController();
   final token = TextEditingController();
   bool _autoRestore = true;
+  bool _saved = false;
   bool get connecting => peer.busy;
 
   @override
@@ -54,7 +53,8 @@ class _ControllerPageState extends State<ControllerPage>
       if (_autoRestore && address.text.isEmpty && pin.text.isEmpty) {
         address.text = data['address'] as String;
         pin.text = data['pin'] as String;
-        await peer.connect(address.text, pin.text, '', token.clear);
+        setState(() => _saved = true);
+        await peer.connect(address.text, pin.text, '', _paired);
       }
     } catch (_) {
       // Manual entry remains available if secure storage cannot be read.
@@ -79,7 +79,12 @@ class _ControllerPageState extends State<ControllerPage>
   Future<void> _connect() async {
     FocusScope.of(context).unfocus();
     _autoRestore = false;
-    await peer.connect(address.text, pin.text, token.text, token.clear);
+    await peer.connect(address.text, pin.text, token.text, _paired);
+  }
+
+  void _paired() {
+    token.clear();
+    if (mounted) setState(() => _saved = true);
   }
 
   Future<void> _scanPairing() async {
@@ -101,76 +106,183 @@ class _ControllerPageState extends State<ControllerPage>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: peer,
     builder: (context, _) => peer.showControls
-        ? MousePage(peer: peer)
+        ? ControlDeck(peer: peer)
         : Scaffold(
-            appBar: AppBar(title: const Text('Connect to your computer')),
             body: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.all(24),
                 children: [
                   Text(
-                    'Linkpad',
-                    style: Theme.of(context).textTheme.headlineLarge,
+                    'linkpad',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -1,
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 44),
                   Text(
-                    peer.status,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    'PHONE MEETS DESKTOP',
+                    style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 1.8,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'A little closer.\nFrom anywhere\nin the room.',
+                    style: TextStyle(
+                      fontSize: 36,
+                      height: 1.12,
+                      letterSpacing: -1.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Your computer, comfortably in hand.'),
+                  const SizedBox(height: 32),
+                  if (_saved) ...[
+                    const Text(
+                      'SAVED COMPUTER',
+                      style: TextStyle(fontSize: 11, letterSpacing: 1.8),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.desktop_windows_outlined),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  Uri.tryParse(address.text)?.host ??
+                                      'Your computer',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 22),
+                          FilledButton.icon(
+                            onPressed: connecting
+                                ? null
+                                : () {
+                                    token.clear();
+                                    _connect();
+                                  },
+                            icon: const Icon(Icons.north_east, size: 18),
+                            label: Text(
+                              connecting
+                                  ? 'Connecting…'
+                                  : 'Connect to computer',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  if (peer.state != PeerState.disconnected)
+                    Text(
+                      peer.status,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   const SizedBox(height: 20),
-                  FilledButton.icon(
+                  OutlinedButton.icon(
                     onPressed: connecting ? null : _scanPairing,
                     icon: const Icon(Icons.qr_code_scanner),
-                    label: const Text('Scan QR to pair'),
+                    label: const Text('Pair a computer'),
                   ),
                   const SizedBox(height: 12),
-                  const Text('Or enter the details manually below.'),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: address,
-                    onChanged: (_) => _autoRestore = false,
-                    autocorrect: false,
-                    keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      labelText: 'Desktop address',
-                      hintText: 'wss://192.168.1.10:4747/ws',
+                  ExpansionTile(
+                    title: const Text(
+                      'Enter pairing details',
+                      style: TextStyle(fontSize: 13),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: pin,
-                    onChanged: (_) => _autoRestore = false,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Verified desktop fingerprint',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: token,
-                    onChanged: (_) => _autoRestore = false,
-                    obscureText: true,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Pairing secret (first connection only)',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'For manual pairing, verify the fingerprint directly on your computer.',
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: connecting ? null : _connect,
-                    child: Text(connecting ? 'Connecting…' : 'Connect / pair'),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.symmetric(vertical: 16),
+                    children: [
+                      TextField(
+                        controller: address,
+                        onChanged: (_) => _autoRestore = false,
+                        autocorrect: false,
+                        keyboardType: TextInputType.url,
+                        decoration: const InputDecoration(
+                          labelText: 'Desktop address',
+                          hintText: 'wss://192.168.1.10:4747/ws',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: pin,
+                        onChanged: (_) => _autoRestore = false,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Verified desktop fingerprint',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: token,
+                        onChanged: (_) => _autoRestore = false,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Pairing secret (first connection only)',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'For manual pairing, verify the fingerprint directly on your computer.',
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        onPressed: connecting ? null : _connect,
+                        child: Text(
+                          connecting ? 'Connecting…' : 'Connect / pair',
+                        ),
+                      ),
+                      if (connecting)
+                        TextButton(
+                          onPressed: peer.disconnect,
+                          child: const Text('Cancel'),
+                        ),
+                    ],
                   ),
                   if (connecting)
                     TextButton(
                       onPressed: peer.disconnect,
-                      child: const Text('Cancel'),
+                      child: const Text('Cancel connection'),
                     ),
+                  const SizedBox(height: 32),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.lock_outline, size: 13),
+                      SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Direct connection. No account needed.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -178,151 +290,44 @@ class _ControllerPageState extends State<ControllerPage>
   );
 }
 
-class MousePage extends StatelessWidget {
-  const MousePage({super.key, required this.peer});
-  final PeerClient peer;
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    onPopInvokedWithResult: (didPop, result) {
-      if (!didPop) peer.disconnect();
-    },
-    child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Touchpad'),
-        leading: IconButton(
-          onPressed: peer.disconnect,
-          tooltip: 'Disconnect and return',
-          icon: const Icon(Icons.arrow_back),
-        ),
-        actions: [
-          TextButton(
-            onPressed: peer.disconnect,
-            child: const Text('Disconnect'),
-          ),
-        ],
+ThemeData linkpadTheme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: const Color(0xff244f39),
+        brightness: brightness,
+      ).copyWith(
+        primary: Color(dark ? 0xffb6df9b : 0xff244f39),
+        onPrimary: Color(dark ? 0xff182b1d : 0xffffffff),
+        surface: Color(dark ? 0xff111b17 : 0xfff7f8f3),
+        onSurface: Color(dark ? 0xffedf5ef : 0xff182822),
+        onSurfaceVariant: Color(dark ? 0xffa2b4a7 : 0xff5d6e63),
+        surfaceContainerHighest: Color(dark ? 0xff1b2922 : 0xffe9eee5),
+        outlineVariant: Color(dark ? 0xff314038 : 0xffd8dfd4),
+      );
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface,
+      scrolledUnderElevation: 0,
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(44, 52),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    peer.ready ? Icons.check_circle : Icons.info_outline,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(peer.status)),
-                ],
-              ),
-              if (peer.storageWarning != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(peer.storageWarning!),
-                ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Semantics(
-                  label: 'Touchpad. Drag to move the desktop pointer.',
-                  enabled: peer.ready,
-                  child: RelativeTouchpad(
-                    onScroll: peer.canScroll ? peer.scroll : null,
-                    onClick: peer.click,
-                    enabled: peer.ready,
-                    onMove: peer.move,
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.touch_app_outlined, size: 40),
-                          const SizedBox(height: 12),
-                          Text(
-                            peer.ready
-                                ? 'Drag to move · tap to click'
-                                : 'Waiting for the connection…',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // ponytail: D-pad sends arrow keys via key.v1; no cursor nudging.
-              Semantics(
-                label: 'D-pad. Tap to press an arrow key on the desktop.',
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      onPressed: peer.canKey
-                          ? () => peer.pressKey('left')
-                          : null,
-                      tooltip: 'Left arrow',
-                      icon: const Icon(Icons.arrow_left),
-                    ),
-                    IconButton(
-                      onPressed: peer.canKey ? () => peer.pressKey('up') : null,
-                      tooltip: 'Up arrow',
-                      icon: const Icon(Icons.arrow_drop_up),
-                    ),
-                    IconButton(
-                      onPressed: peer.canKey
-                          ? () => peer.pressKey('down')
-                          : null,
-                      tooltip: 'Down arrow',
-                      icon: const Icon(Icons.arrow_drop_down),
-                    ),
-                    IconButton(
-                      onPressed: peer.canKey
-                          ? () => peer.pressKey('right')
-                          : null,
-                      tooltip: 'Right arrow',
-                      icon: const Icon(Icons.arrow_right),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.tonal(
-                      onPressed: peer.ready ? () => peer.click('left') : null,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Left click'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.tonal(
-                      onPressed: peer.ready ? () => peer.click('right') : null,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Right click'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(44, 52),
+        side: BorderSide(color: scheme.outlineVariant),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
     ),
   );
 }

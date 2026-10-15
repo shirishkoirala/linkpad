@@ -14,9 +14,10 @@ import (
 )
 
 var linuxInput struct {
-	once    sync.Once
-	backend *x11Input
-	err     error
+	once     sync.Once
+	backend  *x11Input
+	err      error
+	keyboard func(string, string, []string) ([]keyboardStroke, error)
 }
 
 func initializeX11() {
@@ -66,6 +67,15 @@ func initializeX11() {
 			}
 			return 0, fmt.Errorf("arrow key %s is unavailable in the X11 keyboard map", key)
 		},
+	}
+	linuxInput.keyboard = func(key, text string, mods []string) ([]keyboardStroke, error) {
+		setup := xproto.Setup(conn)
+		count := byte(int(setup.MaxKeycode) - int(setup.MinKeycode) + 1)
+		mapping, err := xproto.GetKeyboardMapping(conn, setup.MinKeycode, count).Reply()
+		if err != nil {
+			return nil, err
+		}
+		return keyboardStrokes(mapping.Keysyms, int(mapping.KeysymsPerKeycode), byte(setup.MinKeycode), key, text, mods)
 	}
 }
 
