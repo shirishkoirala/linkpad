@@ -29,3 +29,9 @@ The first two overlapping Android build attempts conflicted over generated resou
 - Independent security review, multi-peer load/denial-of-service behavior or certificate renewal.
 
 See README for the full feature limits.
+
+## Linux X11 backend — 15 October 2026
+
+Added pure-Go XTEST input support for Linux, including static/no-cgo builds. Portable race tests cover relative-motion mode, movement bounds, ordered complete clicks, natural wheel directions, accumulation/expiry, arrow key lookup, release attempts after errors, and concurrent input serialization. A Linux-only opt-in integration test verifies actual cursor coordinates, button/wheel delivery and balanced arrow keys under Xvfb; ordinary test runs do not inject input into a real desktop. CI includes an isolated Xvfb job. Physical Linux hardware verification remains pending.
+
+The Linux amd64 test executable ran successfully in a disposable Debian container under Xvfb. The integration test confirmed two relative moves ended at the expected cursor coordinates, left/right clicks and both wheel axes reached an X11 window, arrow press/release pairs were balanced, and no mouse buttons remained held. Portable event tests also passed there. `go test -race ./...` and `go vet ./...` passed on macOS. Linux, Windows and macOS no-cgo cross-builds succeeded.

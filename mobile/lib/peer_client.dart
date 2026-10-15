@@ -100,7 +100,7 @@ class PeerClient extends ChangeNotifier {
           ? 'Connection slow • input paused'
           : _pointer
           ? 'Connected'
-          : 'Connected • enable Accessibility on your Mac, then restart its server',
+          : 'Connected • desktop input unavailable',
   };
 
   void _notify() {
@@ -190,7 +190,7 @@ class PeerClient extends ChangeNotifier {
           if (host != address.host ||
               sha256.convert(cert.der).toString() != pin) {
             certificateFailure =
-                'Desktop fingerprint changed. Verify it on your Mac before reconnecting.';
+                'Desktop fingerprint changed. Verify it on your computer before reconnecting.';
             return false;
           }
           if (now.isBefore(cert.startValidity) ||
@@ -244,7 +244,7 @@ class PeerClient extends ChangeNotifier {
         );
       } else {
         _networkFailure(
-          'Cannot reach your Mac. Check its server and Wi-Fi connection.',
+          'Cannot reach your computer. Check its server and Wi-Fi connection.',
         );
       }
     }
@@ -257,11 +257,11 @@ class PeerClient extends ChangeNotifier {
         final reason = message['error'];
         _fatal(switch (reason) {
           'pairing rejected' =>
-            'Pairing secret expired, was already used, or is incorrect. Start a new pairing window on your Mac.',
+            'Pairing secret expired, was already used, or is incorrect. Start a new pairing window on your computer.',
           'unpaired device' =>
-            'This device is not paired. Start pairing on your Mac and enter its new secret.',
+            'This device is not paired. Start pairing on your computer and enter its new secret.',
           'capability not negotiated' =>
-            'Pointer permission is unavailable. Enable Accessibility on your Mac and restart its server.',
+            'Input was not enabled for this connection. Enable input on the desktop server and reconnect.',
           _ =>
             'Desktop rejected the request. Check the Mac server and reconnect.',
         });
@@ -355,8 +355,11 @@ class PeerClient extends ChangeNotifier {
       if (!ready || _pending) return;
       final input = _input.take(_clock.elapsed);
       if (input != null) {
-        _send(input.isScroll ? scrollMessage(input.dx, input.dy)
-          : pointer(input.dx, input.dy, input.button));
+        _send(
+          input.isScroll
+              ? scrollMessage(input.dx, input.dy)
+              : pointer(input.dx, input.dy, input.button),
+        );
       }
     });
   }

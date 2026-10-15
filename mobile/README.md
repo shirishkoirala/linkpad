@@ -15,6 +15,8 @@ flutter run
 
 For Android, use Android 10/API 29 or later. For iOS, use iOS 15 or later, Xcode and a configured signing team; approve the Local Network permission prompt. Both devices must reach the desktop over the same LAN.
 
+For first-time setup, start the desktop with `-listen 0.0.0.0:4747 -pair -allow-pointer`, tap **Scan QR to pair** and scan its terminal code. Allow camera access when prompted. QR codes expire after two minutes and carry the exact certificate pin; scanning connects automatically. If camera access is unavailable, use the manual fields. Tap **Disconnect** to return to setup when already connected. For Linux X11, also use `-allow-pointer` and run the server as the logged-in desktop user.
+
 Start the desktop with `-pair -allow-pointer`, enter `wss://DESKTOP-IP:4747/ws`, verify its fingerprint on the desktop, and enter the short-lived secret. Successful pairing saves the address and pin and clears the secret. Reconnect without a secret. Grant macOS Accessibility permission to enable actual mouse input. An empty capability list means pairing succeeded but pointer control is unavailable.
 
 The client creates an EC identity certificate, stores its PEM credentials with flutter_secure_storage (Android encrypted storage / iOS Keychain), requires TLS 1.3 and checks the exact desktop certificate SHA-256 fingerprint and validity dates. Unlike the Kotlin implementation, this identity uses a software private key that is read into Dart memory, rather than a non-exportable Android Keystore signing key. This is a deliberate portability tradeoff. Uninstall/backup/keychain behavior varies by OS; loss of the identity requires re-pairing. Certificates last ten years; renewal is not implemented.

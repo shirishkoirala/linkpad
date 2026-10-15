@@ -42,7 +42,9 @@ class InputBuffer {
   void _motion(double dx, double dy, Duration now, bool isScroll) {
     if (!dx.isFinite || !dy.isFinite) return;
     _expire(now);
-    if (_queue.isEmpty || _queue.last.button != null || _queue.last.isScroll != isScroll) {
+    if (_queue.isEmpty ||
+        _queue.last.button != null ||
+        _queue.last.isScroll != isScroll) {
       if (_queue.length >= 32) return;
       _queue.add(_Input(now, 0, 0, null, isScroll));
     }
@@ -55,7 +57,10 @@ class InputBuffer {
   void click(String button, Duration now) {
     if (button != 'left' && button != 'right') return;
     _expire(now);
-    if (_queue.length >= 32 || _queue.where((input) => input.button != null).length >= 8) return;
+    if (_queue.length >= 32 ||
+        _queue.where((input) => input.button != null).length >= 8) {
+      return;
+    }
     _queue.add(_Input(now, 0, 0, button));
   }
 

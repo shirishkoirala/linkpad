@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'peer_client.dart';
 import 'relative_touchpad.dart';
+import 'pairing_invitation.dart';
+import 'pairing_scanner.dart';
 
 void main() => runApp(const LinkpadApp());
 
@@ -80,13 +82,28 @@ class _ControllerPageState extends State<ControllerPage>
     await peer.connect(address.text, pin.text, token.text, token.clear);
   }
 
+  Future<void> _scanPairing() async {
+    FocusScope.of(context).unfocus();
+    _autoRestore = false;
+    peer.disconnect();
+    token.clear();
+    final invitation = await Navigator.of(context).push<PairingInvitation>(
+      MaterialPageRoute(builder: (_) => const PairingScanner()),
+    );
+    if (!mounted || invitation == null) return;
+    address.text = invitation.address;
+    pin.text = invitation.fingerprint;
+    token.text = invitation.secret;
+    await _connect();
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: peer,
     builder: (context, _) => peer.showControls
         ? MousePage(peer: peer)
         : Scaffold(
-            appBar: AppBar(title: const Text('Connect to your Mac')),
+            appBar: AppBar(title: const Text('Connect to your computer')),
             body: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.all(24),
@@ -100,6 +117,14 @@ class _ControllerPageState extends State<ControllerPage>
                     peer.status,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: connecting ? null : _scanPairing,
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan QR to pair'),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Or enter the details manually below.'),
                   const SizedBox(height: 24),
                   TextField(
                     controller: address,
@@ -134,7 +159,7 @@ class _ControllerPageState extends State<ControllerPage>
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Verify the fingerprint directly on your Mac before pairing.',
+                    'For manual pairing, verify the fingerprint directly on your computer.',
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
@@ -242,7 +267,9 @@ class MousePage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
-                      onPressed: peer.canKey ? () => peer.pressKey('left') : null,
+                      onPressed: peer.canKey
+                          ? () => peer.pressKey('left')
+                          : null,
                       tooltip: 'Left arrow',
                       icon: const Icon(Icons.arrow_left),
                     ),
@@ -252,12 +279,16 @@ class MousePage extends StatelessWidget {
                       icon: const Icon(Icons.arrow_drop_up),
                     ),
                     IconButton(
-                      onPressed: peer.canKey ? () => peer.pressKey('down') : null,
+                      onPressed: peer.canKey
+                          ? () => peer.pressKey('down')
+                          : null,
                       tooltip: 'Down arrow',
                       icon: const Icon(Icons.arrow_drop_down),
                     ),
                     IconButton(
-                      onPressed: peer.canKey ? () => peer.pressKey('right') : null,
+                      onPressed: peer.canKey
+                          ? () => peer.pressKey('right')
+                          : null,
                       tooltip: 'Right arrow',
                       icon: const Icon(Icons.arrow_right),
                     ),

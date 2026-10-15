@@ -1,10 +1,13 @@
-//go:build !darwin || !cgo
+//go:build !linux && (!darwin || !cgo)
 
 package pointer
 
 import "fmt"
 
 func Available() bool { return false }
+func AvailabilityError() error {
+	return fmt.Errorf("desktop input is unavailable on this platform/build")
+}
 func nativeScroll(dx, dy int) error {
 	return fmt.Errorf("scroll backend unavailable on this platform/build")
 }

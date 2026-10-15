@@ -28,7 +28,8 @@ func NewPairing(ttl time.Duration) (*Pairing, error) {
 	}
 	return &Pairing{secret: hex.EncodeToString(b), expires: time.Now().Add(ttl)}, nil
 }
-func (p *Pairing) Secret() string { return p.secret }
+func (p *Pairing) Secret() string       { return p.secret }
+func (p *Pairing) ExpiresAt() time.Time { return p.expires }
 
 // authorize serializes token consumption with durable trust persistence.
 func (p *Pairing) authorize(token string, save func() error) error {

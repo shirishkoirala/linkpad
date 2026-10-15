@@ -7,10 +7,25 @@ An MIT-licensed, local-first device connectivity experiment inspired by KDE Conn
 - Go peer identity persisted as an ECDSA P-256 self-signed certificate; TLS 1.3 WebSocket connections and explicit addresses.
 - Mutual TLS proof of identity, mandatory controller-side server fingerprint verification, a single-use 256-bit pairing secret with a two-minute window, persistent desktop trust, reconnect and capability negotiation.
 - An in-process plugin interface and registry. Pointer plugin available only when opted in and supported by the host.
-- Native macOS cursor movement and left/right click through CoreGraphics, gated by Accessibility permission. Windows/Linux and builds without cgo are explicit unavailable stubs and do not advertise pointer support.
+- Native macOS cursor movement and left/right click through CoreGraphics, gated by Accessibility permission. Linux X11 input uses a pure-Go authenticated XTEST connection for relative movement, clicks, wheel scrolling and arrow keys. Windows and macOS builds without cgo remain unavailable stubs.
 - Kotlin/Compose Android touchpad, first-time pairing and reconnect, Android Keystore EC identity, exact desktop certificate pin, connection status and foreground-only sessions.
 - Flutter Android/iOS controller in `mobile/`, with shared pairing, certificate pinning, touchpad and foreground-only sessions. Flutter uses a software EC identity protected by platform secure storage; physical iPhone validation remains pending.
 - Go integration/security tests, Android protocol unit tests, protocol JSON Schema, CI and build instructions.
+
+## Pair by scanning a QR code
+
+Start the desktop agent with a reachable LAN listener and a new pairing window:
+
+```sh
+# macOS
+./bin/linkpad -listen 0.0.0.0:4747 -pair -allow-pointer
+# Linux X11: run from a terminal in your desktop session
+./linkpad-linux-x86_64 -listen 0.0.0.0:4747 -pair -allow-pointer
+```
+
+In the Flutter phone app, tap **Scan QR to pair**, allow camera access, and scan the code shown directly on your computer. The app fills the connection details and pairs automatically. The QR is single-use and expires in two minutes. To show the scanner when already connected, tap **Disconnect** first. After pairing, reconnects use the saved identity without scanning again.
+
+Use `-pair-qr /path/to/new-pairing.png` to also create a private PNG if your terminal cannot display the code cleanly; the path must not already exist. Use `-advertise wss://YOUR-LAN-IP:4747/ws` if the server selects the wrong network interface. Both devices must be able to reach the advertised address. Manual pairing remains available. See [protocol/pairing.md](protocol/pairing.md) for the payload and trust model.
 
 ## Desktop: build and run
 
@@ -64,6 +79,21 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 On the same reachable LAN, enter `wss://DESKTOP-LAN-IP:4747/ws`, the verified 64-character fingerprint, and the first-time secret. Tap **Connect / pair**. A successful handshake saves address/pin in app-private preferences and clears the secret. The non-exportable identity remains in Android Keystore. Subsequent connections use no secret. For the Android emulator, `10.0.2.2` routes to the host; ensure the node listens on a reachable interface. No cleartext transport is supported. Drag the pad to move; click buttons emit complete clicks. Movement is approximate and intentionally drops samples under backpressure.
 
+## Linux X11 desktop control
+
+The Linux x86_64 executable supports mouse movement, left/right click, two-finger wheel scrolling and D-pad arrow keys through the XTEST extension. It is statically linked and does not require `xdotool`, root, `/dev/uinput`, or disabling X server access control.
+
+Run from a terminal inside the logged-in X11 desktop session, as that same user:
+
+```sh
+echo "$XDG_SESSION_TYPE"  # should say x11
+./linkpad-linux-x86_64 -listen 0.0.0.0:4747 -allow-pointer
+```
+
+For first-time enrollment, also add `-pair`. `DISPLAY` and, when required by the desktop, `XAUTHORITY` are inherited from that session. A headless SSH shell without those credentials cannot control the desktop. The startup log explains missing DISPLAY, X11 authorization failures or a missing XTEST extension. Correct the environment and restart the server if input is unavailable. Pairing still works without input support.
+
+X11 core wheel events use discrete notches: small touch deltas accumulate until 40 pixels, then emit a complete wheel press/release. Leftover scroll is discarded after 150 ms of inactivity. This provides natural-direction scrolling, but not macOS-style pixel scrolling or momentum. Wayland and headless console control remain unsupported.
+
 ## Repository map
 
 - `cmd/linkpad`: executable, listen/connect modes and permissions.
@@ -81,7 +111,7 @@ On the same reachable LAN, enter `wss://DESKTOP-LAN-IP:4747/ws`, the verified 64
 
 ## Incomplete / limits
 
-Explicit address only: no mDNS/discovery, QR enrollment, background mobile service, file sharing, clipboard, notification sync, remote screen or internet relay. Android currently only controls, not receives. The Go process can act as either peer but does not provide a tray UI or multiplex bidirectional plugin families. Pointer authorization is global for all paired peers; per-device permissions, live revocation, audit UI, handshake admission limits and global event quotas remain work. Plugin modules are compiled into the agent; no third-party package loader or sandbox exists. A compromised paired device can operate the pointer while that capability is enabled. Local key storage uses OS file permissions on desktop, not a hardware keystore. Run a single agent process per state directory; trust files are not multi-process coordinated. This is not security audited.
+Explicit address only: no mDNS/discovery, background mobile service, file sharing, clipboard, notification sync, remote screen or internet relay. Android currently only controls, not receives. The Go process can act as either peer but does not provide a tray UI or multiplex bidirectional plugin families. Pointer authorization is global for all paired peers; per-device permissions, live revocation, audit UI, handshake admission limits and global event quotas remain work. Plugin modules are compiled into the agent; no third-party package loader or sandbox exists. A compromised paired device can operate the pointer while that capability is enabled. Local key storage uses OS file permissions on desktop, not a hardware keystore. Run a single agent process per state directory; trust files are not multi-process coordinated. This is not security audited.
 
 See [VALIDATION.md](VALIDATION.md) for checks actually run and hardware verification still needed. Do not treat configured CI as a completed remote run.
 

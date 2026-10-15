@@ -64,14 +64,18 @@ class _RelativeTouchpadState extends State<RelativeTouchpad> {
     if (_peakFingers > 2) _tap = false;
   }
 
-  Offset get _centroid => _positions.values.reduce((a, b) => a + b) / _positions.length.toDouble();
+  Offset get _centroid =>
+      _positions.values.reduce((a, b) => a + b) / _positions.length.toDouble();
 
   void _move(PointerMoveEvent event) {
     final origin = _origins[event.pointer];
     if (!widget.enabled || origin == null) return;
     _positions[event.pointer] = event.localPosition;
     if ((event.localPosition - origin).distance > 6) _tap = false;
-    if (!_tap && _peakFingers == 2 && _positions.length == 2 && _scrollLast != null) {
+    if (!_tap &&
+        _peakFingers == 2 &&
+        _positions.length == 2 &&
+        _scrollLast != null) {
       final center = _centroid;
       final delta = center - _scrollLast!;
       _scrollLast = center;

@@ -237,7 +237,7 @@ void main() {
     await waitFor(peer, () => sockets.length == 2 && peer.connected);
     expect(peer.ready, isFalse);
     expect(peer.showControls, isTrue);
-    expect(peer.status, contains('Accessibility'));
+    expect(peer.status, contains('desktop input unavailable'));
   });
 
   test('slow acknowledgements discard buffered motion and clicks', () async {

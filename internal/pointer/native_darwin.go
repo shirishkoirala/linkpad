@@ -44,6 +44,12 @@ import "C"
 import "fmt"
 
 func Available() bool { return C.permitted() != 0 }
+func AvailabilityError() error {
+	if Available() {
+		return nil
+	}
+	return fmt.Errorf("grant macOS Accessibility permission to the responsible application, then restart Linkpad")
+}
 func nativeScroll(dx, dy int) error {
 	if C.scrollPointer(C.int(dx), C.int(dy)) == 0 {
 		return fmt.Errorf("macOS Accessibility permission required or scroll event creation failed")

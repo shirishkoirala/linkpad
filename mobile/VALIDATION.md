@@ -32,3 +32,13 @@ Current suite: 29 passing Flutter tests; `flutter analyze` reports no issues. Ad
 iOS scene lifecycle callbacks now explicitly forward resumed/inactive/paused/detached state to the Flutter engine so the client can suspend and resume its sessions. Tests exercise loopback faults; physical Wi-Fi switching, long-running sessions and screen-lock behavior still need hardware verification. These checks do not constitute a security audit.
 
 The stability release built and launched on the paired iPhone. A new phone-to-server connection appeared automatically after launch. The desktop process was then stopped and restarted without a pairing window; the iPhone established a new connection to the restarted server without manual input. Pointer feel, screen-lock recovery and actual Wi-Fi switching remain hardware checks for the user.
+
+## QR pairing — 15 October 2026
+
+35 Flutter tests passed, including shared Go/Dart invitation payload parsing, expiry, malformed data, unsupported versions, invalid credentials and unsafe addresses. Go race tests passed, including independent QR decoding of both the generated PNG and reconstructed terminal half-block representation, private PNG permissions and refusal to overwrite existing files. `go vet ./...` and Flutter static analysis passed. Mac and Linux x86_64 desktop executables rebuilt with QR pairing. Actual camera permission/scanning on iPhone remains a hardware check.
+
+QR release build installed and launched on the paired iPhone. The CLI integration test decodes its generated PNG, enrolls over mutual TLS using only the scanned data, rejects reuse by another identity, and reconnects the enrolled client without a secret. The actual iPhone camera scan remains a user hardware check.
+
+## Cross-platform input status — 15 October 2026
+
+The mobile status for an empty input capability list now reads “Connected • desktop input unavailable” instead of incorrectly requesting macOS Accessibility permission on Linux. All 35 Flutter tests passed, and the release was rebuilt and launched on the iPhone.

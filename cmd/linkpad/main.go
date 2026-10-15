@@ -3,6 +3,7 @@ package main
 import (
 	"example.org/linkpad/internal/identity"
 	"example.org/linkpad/internal/node"
+	"example.org/linkpad/internal/pairingqr"
 	"example.org/linkpad/internal/plugins"
 	"example.org/linkpad/internal/pointer"
 	"example.org/linkpad/internal/protocol"
@@ -28,6 +29,8 @@ func run() error {
 	state := flag.String("state", filepath.Join(home, "linkpad"), "private identity/trust directory")
 	listen := flag.String("listen", "127.0.0.1:4747", "listen address; use LAN IP for mobile")
 	pair := flag.Bool("pair", false, "open single-use 2-minute pairing window")
+	advertise := flag.String("advertise", "", "address encoded in pairing QR (wss://LAN-IP:4747/ws); inferred from listen address by default")
+	pairPNG := flag.String("pair-qr", "", "optional private pairing QR PNG path (must not already exist)")
 	allow := flag.Bool("allow-pointer", false, "allow trusted peers to control pointer")
 	connect := flag.String("connect", "", "explicit peer wss://HOST:4747/ws")
 	pin := flag.String("pin", "", "server SHA-256 certificate fingerprint")
@@ -36,6 +39,9 @@ func run() error {
 	click := flag.String("click", "", "left or right click")
 	key := flag.String("key", "", "arrow key: up, down, left or right")
 	flag.Parse()
+	if (*pairPNG != "" || *advertise != "") && !*pair {
+		return fmt.Errorf("-pair-qr and -advertise require -pair")
+	}
 	cert, err := identity.Load(*state)
 	if err != nil {
 		return err
@@ -112,7 +118,7 @@ func run() error {
 			registry[protocol.Scroll] = pointer.ScrollBackend{}
 			registry[protocol.Key] = pointer.KeyBackend{}
 		} else {
-			log.Print("Pointer unavailable: grant macOS Accessibility permission; Windows/Linux/non-cgo builds are stubs")
+			log.Printf("Desktop input unavailable: %v", pointer.AvailabilityError())
 		}
 	}
 	n := &node.Node{Trust: trust, Plugins: registry}
@@ -122,6 +128,25 @@ func run() error {
 			return err
 		}
 		fmt.Println("Single-use pairing secret (expires in 2 minutes):", n.Pairing.Secret())
+		address, qrErr := pairingqr.Address(*listen, *advertise)
+		if qrErr != nil {
+			return fmt.Errorf("pairing QR address: %w", qrErr)
+		}
+		invitation, qrErr := pairingqr.New(address, identity.Fingerprint(cert.Certificate[0]), n.Pairing.Secret(), n.Pairing.ExpiresAt())
+		if qrErr != nil {
+			return qrErr
+		}
+		fmt.Println("On your phone, tap Scan QR and scan this code to pair with", address)
+		fmt.Println("The QR contains the one-use pairing secret and expires in two minutes.")
+		if qrErr = invitation.Render(os.Stdout); qrErr != nil {
+			return qrErr
+		}
+		if *pairPNG != "" {
+			if qrErr = invitation.WritePNG(*pairPNG); qrErr != nil {
+				return fmt.Errorf("save pairing QR: %w", qrErr)
+			}
+			fmt.Println("Pairing QR image:", *pairPNG)
+		}
 	}
 	server := &http.Server{Addr: *listen, Handler: n.Handler(), TLSConfig: n.TLS(cert), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	fmt.Println("Listening on", *listen)
