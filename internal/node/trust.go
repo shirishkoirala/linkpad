@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 )
 
@@ -33,13 +34,38 @@ func OpenTrust(dir string) (*Trust, error) {
 }
 func (t *Trust) Contains(id string) bool { t.mu.Lock(); defer t.mu.Unlock(); return t.peers[id] }
 func (t *Trust) Add(id string) error {
+	return t.update(id, true)
+}
+
+func (t *Trust) Remove(id string) error {
+	return t.update(id, false)
+}
+
+func (t *Trust) List() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	ids := []string{}
+	for id, allowed := range t.peers {
+		if allowed {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (t *Trust) update(id string, add bool) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	next := map[string]bool{}
 	for k, v := range t.peers {
 		next[k] = v
 	}
-	next[id] = true
+	if add {
+		next[id] = true
+	} else {
+		delete(next, id)
+	}
 	b, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err

@@ -57,6 +57,8 @@ type Node struct {
 	dragTimer      *time.Timer
 	dragGeneration uint64
 	DragTimeout    time.Duration
+	management     sync.Mutex
+	sessions       map[*websocket.Conn]string
 }
 
 func (n *Node) TLS(cert tls.Certificate) *tls.Config {
@@ -114,7 +116,10 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	switch first.Type {
 	case "pair":
-		if err = n.Pairing.authorize(first.Token, func() error { return n.Trust.Add(id) }); err != nil {
+		n.management.Lock()
+		err = n.Pairing.authorize(first.Token, func() error { return n.Trust.Add(id) })
+		n.management.Unlock()
+		if err != nil {
 			reject("pairing rejected")
 			return
 		}
@@ -128,6 +133,18 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	negotiated := n.Plugins.Negotiate(first.Capabilities)
+	n.management.Lock()
+	if !n.Trust.Contains(id) {
+		n.management.Unlock()
+		reject("device access revoked")
+		return
+	}
+	if n.sessions == nil {
+		n.sessions = make(map[*websocket.Conn]string)
+	}
+	n.sessions[conn] = id
+	n.management.Unlock()
+	defer func() { n.management.Lock(); delete(n.sessions, conn); n.management.Unlock() }()
 	if err = send(protocol.Message{Version: 1, Type: "ready", Capabilities: negotiated}); err != nil {
 		return
 	}
@@ -170,7 +187,13 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 			reject(err.Error())
 			return
 		}
-		err = n.input(conn, capability, m)
+		n.management.Lock()
+		if n.Trust.Contains(id) {
+			err = n.input(conn, capability, m)
+		} else {
+			err = fmt.Errorf("device access revoked")
+		}
+		n.management.Unlock()
 		if err != nil {
 			reject(err.Error())
 			return

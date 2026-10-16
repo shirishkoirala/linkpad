@@ -29,6 +29,10 @@ Use `-pair-qr /path/to/new-pairing.png` to also create a private PNG if your ter
 
 ## Desktop: build and run
 
+For the Flutter desktop server app (QR pairing, live phone list, tray controls,
+and start at login), see [DESKTOP.md](DESKTOP.md). The terminal server below
+remains available. Run one of them at a time on port 4747.
+
 Requirements: Go 1.26+, macOS Xcode Command Line Tools for the native backend. Module path `example.org/linkpad` is a placeholder; no repository or release has been published. Initial dependency downloads need internet; runtime requires only a reachable local network.
 
 ```sh

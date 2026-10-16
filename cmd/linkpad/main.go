@@ -38,7 +38,11 @@ func run() error {
 	dy := flag.Int("dy", 0, "relative pointer Y movement")
 	click := flag.String("click", "", "left or right click")
 	key := flag.String("key", "", "arrow key: up, down, left or right")
+	desktop := flag.Bool("desktop", false, "private JSON desktop control over stdin/stdout")
 	flag.Parse()
+	if *desktop {
+		return runDesktop(*state, *listen, *advertise, *allow)
+	}
 	if (*pairPNG != "" || *advertise != "") && !*pair {
 		return fmt.Errorf("-pair-qr and -advertise require -pair")
 	}

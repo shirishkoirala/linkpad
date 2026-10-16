@@ -1,17 +1,36 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'controller_page.dart';
+import 'desktop/desktop_page.dart';
+import 'desktop/desktop_platform.dart';
+import 'desktop/server_controller.dart';
 
-void main() => runApp(const LinkpadApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isMacOS || Platform.isLinux) {
+    final server = ServerController();
+    final desktop = DesktopPlatform(server);
+    runApp(LinkpadApp(desktopServer: server, desktopPlatform: desktop));
+    await desktop.initialize();
+    await server.initialize();
+  } else {
+    runApp(const LinkpadApp());
+  }
+}
 
 class LinkpadApp extends StatelessWidget {
-  const LinkpadApp({super.key});
+  const LinkpadApp({super.key, this.desktopServer, this.desktopPlatform});
+  final ServerController? desktopServer;
+  final DesktopPlatform? desktopPlatform;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Linkpad',
     debugShowCheckedModeBanner: false,
     theme: linkpadTheme(Brightness.light),
     darkTheme: linkpadTheme(Brightness.dark),
-    home: const ControllerPage(),
+    home: desktopServer == null
+        ? const ControllerPage()
+        : DesktopPage(server: desktopServer!, platform: desktopPlatform),
   );
 }
 
