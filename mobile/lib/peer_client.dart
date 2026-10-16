@@ -40,7 +40,7 @@ enum PeerState {
 class PeerTiming {
   const PeerTiming({
     this.connectTimeout = const Duration(seconds: 10),
-    this.responseTimeout = const Duration(seconds: 2),
+    this.responseTimeout = const Duration(seconds: 5),
     this.inputMaxAge = const Duration(milliseconds: 150),
     this.frameInterval = const Duration(milliseconds: 16),
     this.heartbeat = const Duration(seconds: 15),
@@ -90,11 +90,30 @@ class PeerClient extends ChangeNotifier {
   Timer? _dragHeartbeat;
   bool _stalled = false, _disposed = false;
   Duration _pendingSince = Duration.zero;
+  Duration? _lastSentAt, _roundTripTime, _latencyNotifiedAt;
   String _message = '';
+  String? _lastConnectionIssue;
+  int _reconnectCount = 0;
   String? storageWarning;
   PeerState state = PeerState.disconnected;
 
   bool get connected => state == PeerState.connected;
+
+  /// Smoothed acknowledgement round trip, including desktop processing time.
+  Duration? get roundTripTime => _roundTripTime;
+  String get connectionSummary =>
+      connected && !_stalled && _roundTripTime != null
+      ? '$status · ${_roundTripTime!.inMilliseconds} ms'
+      : status;
+  String? get lastConnectionIssue => _lastConnectionIssue;
+  int get reconnectCount => _reconnectCount;
+  String get connectionDetails => [
+    connectionSummary,
+    'Response time includes the network round trip and desktop processing.',
+    'Reconnect attempts this session: $_reconnectCount',
+    if (_lastConnectionIssue != null)
+      'Last interruption: $_lastConnectionIssue',
+  ].join('\n');
   bool get ready => connected && _pointer && !_stalled;
   bool get canScroll => connected && _scroll && !_stalled;
   bool get canKey => connected && _keys && !_stalled;
@@ -187,7 +206,9 @@ class PeerClient extends ChangeNotifier {
     state = _hadConnected || _retryAttempt > 0
         ? PeerState.reconnecting
         : PeerState.connecting;
-    _message = 'Reconnecting…';
+    _message = _lastConnectionIssue == null
+        ? 'Reconnecting…'
+        : '$_lastConnectionIssue Reconnecting…';
     _notify();
     late SecurityContext context;
     try {
@@ -312,13 +333,28 @@ class PeerClient extends ChangeNotifier {
       } else if (message['type'] == 'ack' && connected && _pending) {
         _deadline?.cancel();
         _lag?.cancel();
+        final now = _clock.elapsed;
+        final sample = now - _pendingSince;
+        final previous = _roundTripTime;
+        _roundTripTime = previous == null
+            ? sample
+            : Duration(
+                microseconds:
+                    (previous.inMicroseconds * 3 + sample.inMicroseconds) ~/ 4,
+              );
         if (_clock.elapsed - _pendingSince >= timing.inputMaxAge) {
           _input.clear();
         }
         _pending = false;
         final wasStalled = _stalled;
         _stalled = false;
-        if (wasStalled) _notify();
+        // Keep high-rate acknowledgements off the widget rebuild path.
+        if (wasStalled ||
+            _latencyNotifiedAt == null ||
+            now - _latencyNotifiedAt! >= const Duration(seconds: 1)) {
+          _latencyNotifiedAt = now;
+          _notify();
+        }
         _scheduleInput();
       } else {
         _fatal(
@@ -439,7 +475,12 @@ class PeerClient extends ChangeNotifier {
             (!ready || !_input.hasReady(_clock.elapsed)))) {
       return;
     }
-    _frame = Timer(timing.frameInterval, () {
+    // Pace from the last transmission, not from its acknowledgement. Once a
+    // slow round trip has already used the interval, fresh input can go now.
+    final remaining = _lastSentAt == null
+        ? Duration.zero
+        : timing.frameInterval - (_clock.elapsed - _lastSentAt!);
+    _frame = Timer(remaining.isNegative ? Duration.zero : remaining, () {
       _frame = null;
       if (!connected || _stalled || _pending) return;
       _expireCommands();
@@ -491,6 +532,7 @@ class PeerClient extends ChangeNotifier {
     final generation = _generation;
     _pending = true;
     _pendingSince = _clock.elapsed;
+    _lastSentAt = _pendingSince;
     _deadline?.cancel();
     _lag?.cancel();
     try {
@@ -514,8 +556,10 @@ class PeerClient extends ChangeNotifier {
   }
 
   void _networkFailure(String reason) {
+    _lastConnectionIssue = reason;
     _closeTransport();
     if (_desired && _foreground && _canRetry) {
+      _reconnectCount++;
       final delay = timing.retryDelay(_retryAttempt++);
       state = PeerState.reconnecting;
       _message = '$reason Reconnecting in ${delay.inSeconds.clamp(1, 15)}s…';
@@ -573,6 +617,7 @@ class PeerClient extends ChangeNotifier {
     _socket = null;
     _http = null;
     _pending = _stalled = _pointer = false;
+    _lastSentAt = _roundTripTime = _latencyNotifiedAt = null;
     _scroll = _keys = false;
     _keyboard = false;
     _dragHeartbeat?.cancel();
@@ -584,6 +629,8 @@ class PeerClient extends ChangeNotifier {
   }
 
   void disconnect() {
+    _lastConnectionIssue = null;
+    _reconnectCount = 0;
     _desired = false;
     _hadConnected = false;
     _canRetry = false;

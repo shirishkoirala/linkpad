@@ -96,7 +96,7 @@ class _RemotePageState extends State<RemotePage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  peer.status,
+                                  peer.connectionSummary,
                                   maxLines: 2,
                                   style: TextStyle(
                                     fontSize: 12,

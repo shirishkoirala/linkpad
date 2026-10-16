@@ -174,7 +174,7 @@ class _ControlDeckState extends State<ControlDeck> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    peer.status,
+                                    peer.connectionSummary,
                                     maxLines: 2,
                                     style: TextStyle(
                                       fontSize: 12,
@@ -185,7 +185,7 @@ class _ControlDeckState extends State<ControlDeck> {
                               ),
                             ),
                             Tooltip(
-                              message: peer.status,
+                              message: peer.connectionDetails,
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: Icon(

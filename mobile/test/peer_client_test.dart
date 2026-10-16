@@ -452,6 +452,144 @@ void main() {
     expect(peer.status, contains('desktop input unavailable'));
   });
 
+  test(
+    'late acknowledgement flushes coalesced fresh motion without another frame wait',
+    () async {
+      peer.dispose();
+      peer = PeerClient(
+        timing: const PeerTiming(
+          frameInterval: Duration(milliseconds: 400),
+          inputMaxAge: Duration(seconds: 3),
+          responseTimeout: Duration(seconds: 5),
+        ),
+      );
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      acknowledge = false;
+      peer.move(1, 1);
+      await waitFor(peer, () => received.length == 2);
+      peer.move(3, 2);
+      peer.move(4, 1);
+      peer.click('left');
+      peer.move(-2, 0);
+      // A deliberately delayed response consumes the entire cadence interval.
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      expect(
+        received.length,
+        2,
+        reason: 'Only one message may be unacknowledged.',
+      );
+      final afterAck = Stopwatch()..start();
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 3);
+      expect(afterAck.elapsed, lessThan(const Duration(milliseconds: 200)));
+      expect(received.last['dx'], 7);
+      expect(received.last['dy'], 3);
+      expect(received.last['button'], isNull);
+      expect(
+        peer.roundTripTime,
+        greaterThanOrEqualTo(const Duration(milliseconds: 400)),
+      );
+      expect(peer.connectionSummary, contains(' ms'));
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 4);
+      expect(received.last['button'], 'left');
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 5);
+      expect(received.last['dx'], -2);
+      expect(received.last['button'], isNull);
+      peer.disconnect();
+      expect(peer.roundTripTime, isNull);
+      expect(peer.connectionSummary, 'Disconnected');
+    },
+  );
+
+  test(
+    'fast acknowledgements keep the send-rate cap and throttle latency notifications',
+    () async {
+      peer.dispose();
+      peer = PeerClient(
+        timing: const PeerTiming(frameInterval: Duration(milliseconds: 120)),
+      );
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      var notifications = 0;
+      peer.addListener(() => notifications++);
+      peer.move(1, 0);
+      await waitFor(peer, () => peer.roundTripTime != null);
+      final initialNotifications = notifications;
+      final sinceFirst = Stopwatch()..start();
+      peer.move(2, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(received.length, 2);
+      await waitFor(peer, () => received.length == 3);
+      expect(
+        sinceFirst.elapsed,
+        greaterThanOrEqualTo(const Duration(milliseconds: 85)),
+      );
+      // Wait for this ack to be handled, without causing another status rebuild.
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(notifications, initialNotifications);
+    },
+  );
+
+  test(
+    'a temporary response stall recovers on the same socket without replaying input',
+    () async {
+      peer.dispose();
+      peer =
+          PeerClient(); // Exercise the production pause and reconnect thresholds.
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      acknowledge = false;
+      peer.click('left');
+      await waitFor(peer, () => received.length == 2);
+      peer.move(100, 100);
+      peer.click('right');
+      await waitFor(peer, () => !peer.ready);
+      expect(peer.connected, isTrue);
+      expect(peer.connectionSummary, 'Connection slow • input paused');
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(
+        peer.connected,
+        isTrue,
+        reason: 'A brief stall should not tear down TLS.',
+      );
+      expect(sockets.length, 1);
+      expect(peer.reconnectCount, 0);
+      peer.move(100, 100); // Input remains paused during the stall.
+      acknowledge = true;
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => peer.ready);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(
+        received.length,
+        2,
+        reason: 'Expired motion and clicks must not replay.',
+      );
+      peer.move(3, 4);
+      await waitFor(peer, () => received.length == 3);
+      expect(received.last['dx'], 3);
+      expect(received.last['dy'], 4);
+      expect(peer.lastConnectionIssue, isNull);
+    },
+  );
+
   test('slow acknowledgements discard buffered motion and clicks', () async {
     await peer.connect(
       'wss://127.0.0.1:${server.port}/ws',
@@ -499,6 +637,15 @@ void main() {
       'pointer',
       'hello',
     ]);
+    expect(peer.lastConnectionIssue, 'Desktop stopped responding.');
+    expect(peer.reconnectCount, 1);
+    expect(
+      peer.connectionDetails,
+      contains('Last interruption: Desktop stopped responding.'),
+    );
+    peer.disconnect();
+    expect(peer.lastConnectionIssue, isNull);
+    expect(peer.reconnectCount, 0);
   });
 
   test(
