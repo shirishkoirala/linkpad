@@ -44,24 +44,30 @@ class _RelativeTouchpadState extends State<RelativeTouchpad> {
   @override
   void didUpdateWidget(RelativeTouchpad oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.enabled != widget.enabled) _reset();
+    if (oldWidget.enabled != widget.enabled) {
+      // A network pause does not lift the user's fingers. Keep their contact
+      // identities, but never resume an interrupted tap or replay movement.
+      _tap = false;
+      _lastSent = null;
+      _scrollLast = null;
+    }
   }
 
   void _down(PointerDownEvent event) {
-    if (!widget.enabled) return;
     if (_origins.isEmpty) {
       _reset();
       _started = event.timeStamp;
       _primary = event.pointer;
-      _lastSent = event.localPosition;
+      _lastSent = event.position;
     } else if (event.timeStamp - _started > const Duration(milliseconds: 150)) {
       _tap = false;
     }
-    _origins[event.pointer] = event.localPosition;
-    _positions[event.pointer] = event.localPosition;
+    _origins[event.pointer] = event.position;
+    _positions[event.pointer] = event.position;
     if (_positions.length == 2) _scrollLast = _centroid;
     if (_origins.length > _peakFingers) _peakFingers = _origins.length;
     if (_peakFingers > 2) _tap = false;
+    if (!widget.enabled) _tap = false;
   }
 
   Offset get _centroid =>
@@ -69,23 +75,26 @@ class _RelativeTouchpadState extends State<RelativeTouchpad> {
 
   void _move(PointerMoveEvent event) {
     final origin = _origins[event.pointer];
-    if (!widget.enabled || origin == null) return;
-    _positions[event.pointer] = event.localPosition;
-    if ((event.localPosition - origin).distance > 6) _tap = false;
-    if (!_tap &&
-        _peakFingers == 2 &&
-        _positions.length == 2 &&
-        _scrollLast != null) {
+    if (origin == null) return;
+    _positions[event.pointer] = event.position;
+    if ((event.position - origin).distance > 6) _tap = false;
+    if (!widget.enabled) return;
+    if (!_tap && _peakFingers == 2 && _positions.length == 2) {
       final center = _centroid;
-      final delta = center - _scrollLast!;
+      final previous = _scrollLast;
       _scrollLast = center;
-      widget.onScroll?.call(delta.dx, delta.dy);
+      if (previous != null) {
+        final delta = center - previous;
+        widget.onScroll?.call(delta.dx, delta.dy);
+      }
       return;
     }
     // Tiny movements belong to a tap. Two-finger contacts never move the cursor.
     if (_tap || _peakFingers != 1 || event.pointer != _primary) return;
-    final delta = event.localPosition - _lastSent!;
-    _lastSent = event.localPosition;
+    final previous = _lastSent;
+    _lastSent = event.position;
+    if (previous == null) return;
+    final delta = event.position - previous;
     widget.onMove(delta.dx, delta.dy);
   }
 
@@ -95,7 +104,7 @@ class _RelativeTouchpadState extends State<RelativeTouchpad> {
     final origin = _origins.remove(event.pointer)!;
     _positions.remove(event.pointer);
     _scrollLast = null;
-    if ((event.localPosition - origin).distance > 6) _tap = false;
+    if ((event.position - origin).distance > 6) _tap = false;
     if (_origins.isNotEmpty) return;
     if (widget.enabled &&
         _tap &&

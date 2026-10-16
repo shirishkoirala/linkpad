@@ -29,6 +29,15 @@ Long-press the Wi-Fi icon for the reconnect-attempt count and last interruption
 reason. These survive automatic reconnects and reset when starting a new manual
 connection or disconnecting.
 
+The touchpad retains live finger identities while input is paused, including
+contacts placed during reconnection. It tracks positions without emitting input.
+After recovery, the first movement establishes a new baseline and subsequent
+movement/scroll events resume without requiring another touch-down. Interrupted
+contacts cannot generate tap clicks, and cancelled/released contacts are removed
+normally. The touchpad keeps a stable widget identity when the reconnect warning
+changes the layout, and deltas use screen coordinates to avoid layout-induced
+cursor jumps. Cancelled button drags still require a fresh button press.
+
 This removes the previous extra frame wait, but the one-in-flight design still
 limits throughput on high-latency Wi-Fi. For example, a steady 30 ms round trip
 can support roughly 33 updates/s rather than the previous roughly 22 updates/s.

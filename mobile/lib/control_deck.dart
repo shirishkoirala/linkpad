@@ -218,6 +218,7 @@ class _ControlDeckState extends State<ControlDeck> {
                             ),
                           ),
                         Expanded(
+                          key: const ValueKey('control-deck-touchpad'),
                           child: Semantics(
                             label:
                                 'Touchpad. Drag to move, tap to click, two fingers to scroll or right click.',
