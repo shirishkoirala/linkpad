@@ -115,6 +115,188 @@ void main() {
   });
 
   test(
+    'switching between verified computers closes the old drag and preserves both pairings',
+    () async {
+      capabilities = ['pointer.v1', 'drag.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        'first-secret',
+        () {},
+      );
+      await waitFor(
+        peer,
+        () => peer.ready && peer.computers.find(fingerprint) != null,
+      );
+      await peer.computers.rename(fingerprint, 'Linux PC');
+      peer.startDrag();
+      await waitFor(peer, () => received.any((m) => m['action'] == 'start'));
+      final firstSocket = sockets.first;
+      final other = jsonDecode(generateIdentity()) as Map<String, dynamic>;
+      final cert = other['cert'] as String;
+      final der = base64Decode(
+        cert
+            .split('\n')
+            .map((l) => l.trim())
+            .where((l) => l.isNotEmpty && !l.startsWith('-----'))
+            .join(),
+      );
+      final otherPin = sha256.convert(der).toString();
+      final context = SecurityContext(withTrustedRoots: false)
+        ..minimumTlsProtocolVersion = TlsProtocolVersion.tls1_3
+        ..useCertificateChainBytes(utf8.encode(cert))
+        ..usePrivateKeyBytes(utf8.encode(other['key'] as String))
+        ..setTrustedCertificatesBytes(utf8.encode(clientCertificate));
+      final otherServer = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        0,
+        context,
+        requestClientCertificate: true,
+      );
+      final otherSockets = <WebSocket>[],
+          otherMessages = <Map<String, dynamic>>[];
+      otherServer.listen((request) async {
+        final socket = await WebSocketTransformer.upgrade(request);
+        otherSockets.add(socket);
+        var first = true;
+        socket.listen((data) {
+          final message = jsonDecode(data as String) as Map<String, dynamic>;
+          otherMessages.add(message);
+          socket.add(
+            jsonEncode(
+              first
+                  ? {
+                      'version': 1,
+                      'type': 'ready',
+                      'capabilities': ['pointer.v1'],
+                    }
+                  : {'version': 1, 'type': 'ack'},
+            ),
+          );
+          first = false;
+        });
+      });
+      try {
+        await peer.connect(
+          'wss://127.0.0.1:${otherServer.port}/ws',
+          otherPin,
+          'second-secret',
+          () {},
+        );
+        await waitFor(
+          peer,
+          () =>
+              peer.ready &&
+              peer.computers.find(otherPin) != null &&
+              firstSocket.readyState == WebSocket.closed,
+        );
+        expect(peer.dragging, isFalse);
+        expect(peer.canDrag, isFalse);
+        expect(peer.computers.computers.length, 2);
+        expect(peer.computers.find(fingerprint)!.name, 'Linux PC');
+        peer.move(15, 5);
+        await waitFor(
+          peer,
+          () => otherMessages.any((m) => m['type'] == 'pointer'),
+        );
+        await peer.connect(
+          'wss://127.0.0.1:${server.port}/ws',
+          fingerprint,
+          '',
+          () {},
+        );
+        await waitFor(
+          peer,
+          () =>
+              peer.ready &&
+              peer.canDrag &&
+              otherSockets.first.readyState == WebSocket.closed,
+        );
+        expect(peer.desktopName, 'Linux PC');
+        expect(peer.dragging, isFalse);
+        expect(peer.computers.computers.length, 2);
+        final raw = await PeerClient.storage.read(key: 'computers_v1');
+        expect(raw, isNot(contains('first-secret')));
+        expect(raw, isNot(contains('second-secret')));
+      } finally {
+        peer.disconnect();
+        for (final socket in otherSockets) {
+          await socket.close();
+        }
+        await otherServer.close(force: true);
+      }
+    },
+  );
+
+  test(
+    'drag press, movement, keepalive and release are acknowledged in order',
+    () async {
+      capabilities = ['pointer.v1', 'drag.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canDrag);
+      expect(peer.startDrag(), isTrue);
+      await waitFor(peer, () => received.any((m) => m['action'] == 'start'));
+      peer.move(20, 10);
+      await waitFor(peer, () => received.any((m) => m['action'] == 'move'));
+      await waitFor(peer, () => received.any((m) => m['action'] == 'hold'));
+      peer.endDrag();
+      await waitFor(peer, () => received.any((m) => m['action'] == 'end'));
+      expect(
+        received.where((m) => m['type'] == 'drag').map((m) => m['action']),
+        ['start', 'move', 'hold', 'end'],
+      );
+      expect(peer.dragging, isFalse);
+      expect(received.any((m) => m['button'] == 'left'), isFalse);
+    },
+  );
+
+  test('very quick clicks work and cancelled contacts do not click', () async {
+    capabilities = ['pointer.v1', 'drag.v1'];
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.canDrag);
+    peer.startDrag();
+    peer.endDrag();
+    await waitFor(peer, () => received.any((m) => m['button'] == 'left'));
+    expect(received.any((m) => m['type'] == 'drag'), isFalse);
+    received.clear();
+    peer.startDrag();
+    peer.cancelDrag();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(received, isEmpty);
+  });
+
+  test('stalled drag cancels and never resumes after reconnect', () async {
+    capabilities = ['pointer.v1', 'drag.v1'];
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.canDrag);
+    peer.startDrag();
+    await waitFor(peer, () => received.any((m) => m['action'] == 'start'));
+    acknowledge = false;
+    peer.move(20, 0);
+    await waitFor(peer, () => !peer.dragging);
+    expect(peer.canDrag, isFalse);
+    acknowledge = true;
+    await waitFor(peer, () => sockets.length >= 2 && peer.ready);
+    expect(peer.dragging, isFalse);
+    expect(received.where((m) => m['action'] == 'start').length, 1);
+  });
+
+  test(
     'keyboard input is queued in order until each acknowledgement',
     () async {
       capabilities = ['pointer.v1', 'keyboard.v1'];
@@ -160,8 +342,12 @@ void main() {
       await waitFor(peer, () => received.length == 3);
       expect(received[1]['button'], 'left');
       expect(received[2]['button'], 'right');
-      final saved = await PeerClient.storage.read(key: 'desktop_v1');
-      expect(jsonDecode(saved!)['pin'], fingerprint);
+      await waitFor(peer, () => peer.computers.find(fingerprint) != null);
+      final saved = await PeerClient.storage.read(key: 'computers_v1');
+      expect(
+        (jsonDecode(saved!)['computers'] as List).single['pin'],
+        fingerprint,
+      );
       expect(saved, isNot(contains('one-time-secret')));
     },
   );

@@ -4,6 +4,10 @@ package pointer
 
 import "fmt"
 
+func nativeDrag(action string, dx, dy int) error {
+	return fmt.Errorf("drag backend unavailable on this platform/build")
+}
+
 func nativeKeyboard(key, text string, modifiers []string) error {
 	return fmt.Errorf("keyboard backend unavailable on this platform/build")
 }

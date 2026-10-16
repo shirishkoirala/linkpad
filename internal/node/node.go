@@ -49,10 +49,14 @@ func (p *Pairing) authorize(token string, save func() error) error {
 }
 
 type Node struct {
-	Trust     *Trust
-	Pairing   *Pairing
-	Plugins   plugins.Registry
-	execution sync.Mutex
+	Trust          *Trust
+	Pairing        *Pairing
+	Plugins        plugins.Registry
+	execution      sync.Mutex
+	dragOwner      *websocket.Conn
+	dragTimer      *time.Timer
+	dragGeneration uint64
+	DragTimeout    time.Duration
 }
 
 func (n *Node) TLS(cert tls.Certificate) *tls.Config {
@@ -85,6 +89,7 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	defer n.releaseDrag(conn)
 	conn.SetReadLimit(4096)
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	send := func(m protocol.Message) error {
@@ -152,6 +157,9 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 		case "keyboard":
 			capability = protocol.Keyboard
 			err = m.ValidateKeyboard()
+		case "drag":
+			capability = protocol.Drag
+			err = m.ValidateDrag()
 		}
 		if capability == "" || !protocol.Has(negotiated, capability) {
 			reject("capability not negotiated")
@@ -162,9 +170,7 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 			reject(err.Error())
 			return
 		}
-		n.execution.Lock()
-		err = n.Plugins[capability].Handle(m)
-		n.execution.Unlock()
+		err = n.input(conn, capability, m)
 		if err != nil {
 			reject(err.Error())
 			return

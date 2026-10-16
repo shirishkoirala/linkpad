@@ -6,6 +6,15 @@ type Backend struct{}
 type ScrollBackend struct{}
 type KeyBackend struct{}
 type KeyboardBackend struct{}
+type DragBackend struct{}
+
+func (DragBackend) Capability() string { return protocol.Drag }
+func (DragBackend) Handle(m protocol.Message) error {
+	if err := m.ValidateDrag(); err != nil {
+		return err
+	}
+	return nativeDrag(m.Action, m.DX, m.DY)
+}
 
 func (KeyboardBackend) Capability() string { return protocol.Keyboard }
 func (KeyboardBackend) Handle(m protocol.Message) error {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'drag_protocol.dart';
 
 const pointerCapability = 'pointer.v1';
 const scrollCapability = 'scroll.v1';
@@ -24,6 +25,7 @@ String hello(String token) => jsonEncode({
     scrollCapability,
     keyCapability,
     keyboardCapability,
+    dragCapability,
   ],
 });
 

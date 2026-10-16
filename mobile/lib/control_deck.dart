@@ -2,10 +2,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'peer_client.dart';
 import 'relative_touchpad.dart';
+import 'cursor_settings.dart';
+import 'settings_page.dart';
+import 'hold_click_button.dart';
+import 'remote_page.dart';
 
 class ControlDeck extends StatefulWidget {
-  const ControlDeck({super.key, required this.peer});
+  const ControlDeck({super.key, required this.peer, required this.settings});
   final PeerClient peer;
+  final CursorSettings settings;
   @override
   State<ControlDeck> createState() => _ControlDeckState();
 }
@@ -15,6 +20,32 @@ class _ControlDeckState extends State<ControlDeck> {
   final modifiers = <String>{};
   PeerClient get peer => widget.peer;
   ColorScheme get colors => Theme.of(context).colorScheme;
+  Future<void> _openRemote() async {
+    peer.cancelDrag();
+    final mode = await Navigator.of(context).push<RemoteSelection>(
+      MaterialPageRoute(
+        builder: (_) => RemotePage(
+          peer: peer,
+          onSettings: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => SettingsPage(settings: widget.settings),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || mode == null) return;
+    setState(() {
+      keyboard = mode.mode == 'keyboard';
+      modifiers
+        ..clear()
+        ..addAll(
+          keyboard ? mode.modifiers.where((m) => m != 'shift') : <String>[],
+        );
+      shift = keyboard && mode.modifiers.contains('shift');
+    });
+  }
+
   void _key(String key) {
     if (peer.keyboardKey(key, modifiers: {...modifiers, if (shift) 'shift'})) {
       setState(() {
@@ -65,6 +96,13 @@ class _ControlDeckState extends State<ControlDeck> {
               leading: Icon(Icons.mouse_outlined),
               title: Text('Two-finger tap to right click'),
             ),
+            ListTile(
+              leading: Icon(Icons.open_with),
+              title: Text('Hold Left click and move on the touchpad to drag'),
+              subtitle: Text(
+                'Release Left click to drop. Requires the updated desktop server.',
+              ),
+            ),
             SizedBox(height: 12),
             Text(
               'Modifiers apply to the next key only. Super is Command on Mac and the Windows key on Linux.',
@@ -75,7 +113,12 @@ class _ControlDeckState extends State<ControlDeck> {
     ),
   );
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.settings,
+    builder: (context, _) => _buildDeck(context),
+  );
+
+  Widget _buildDeck(BuildContext context) {
     if (!peer.canKeyboard) {
       modifiers.clear();
       shift = false;
@@ -181,7 +224,10 @@ class _ControlDeckState extends State<ControlDeck> {
                             enabled: peer.ready,
                             child: RelativeTouchpad(
                               enabled: peer.ready,
-                              onMove: peer.move,
+                              onMove: (dx, dy) => peer.move(
+                                dx * widget.settings.sensitivity,
+                                dy * widget.settings.sensitivity,
+                              ),
                               onClick: peer.click,
                               onScroll: peer.canScroll ? peer.scroll : null,
                               child: CustomPaint(
@@ -239,10 +285,14 @@ class _ControlDeckState extends State<ControlDeck> {
                         Row(
                           children: [
                             Expanded(
-                              child: _button(
-                                'Left click',
-                                () => peer.click('left'),
+                              child: HoldClickButton(
                                 enabled: peer.ready,
+                                supportsDrag: peer.supportsDrag,
+                                holding: peer.dragging,
+                                onStart: peer.startDrag,
+                                onEnd: peer.endDrag,
+                                onCancel: peer.cancelDrag,
+                                onClick: () => peer.click('left'),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -313,12 +363,9 @@ class _ControlDeckState extends State<ControlDeck> {
                           children: [
                             _nav(
                               Icons.gamepad_outlined,
-                              'Arrows',
-                              arrows && !keyboard,
-                              () => setState(() {
-                                arrows = keyboard || !arrows;
-                                keyboard = false;
-                              }),
+                              'Remote',
+                              false,
+                              _openRemote,
                             ),
                             _nav(
                               Icons.keyboard_outlined,
@@ -341,6 +388,17 @@ class _ControlDeckState extends State<ControlDeck> {
                               'Computers',
                               false,
                               peer.disconnect,
+                            ),
+                            _nav(
+                              Icons.settings_outlined,
+                              'Settings',
+                              false,
+                              () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      SettingsPage(settings: widget.settings),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -435,7 +493,7 @@ class _ControlDeckState extends State<ControlDeck> {
             for (final mod in ['ctrl', 'alt', 'super'])
               key(
                 mod == 'super'
-                    ? 'Super'
+                    ? 'Win / Cmd'
                     : mod == 'ctrl'
                     ? 'Ctrl'
                     : 'Alt',

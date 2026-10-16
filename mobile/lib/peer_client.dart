@@ -9,6 +9,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'input_buffer.dart';
 import 'protocol.dart';
 import 'keyboard_protocol.dart';
+import 'drag_protocol.dart';
+import 'computer_store.dart';
 
 String generateIdentity() {
   final pair = CryptoUtils.generateEcKeyPair();
@@ -55,11 +57,17 @@ class PeerTiming {
 }
 
 class PeerClient extends ChangeNotifier {
-  PeerClient({this.timing = const PeerTiming()})
-    : _input = InputBuffer(maxAge: timing.inputMaxAge);
+  PeerClient({this.timing = const PeerTiming(), ComputerStore? computers})
+    : _input = InputBuffer(maxAge: timing.inputMaxAge),
+      computers = computers ?? ComputerStore(),
+      _ownsComputers = computers == null {
+    this.computers.addListener(_notify);
+  }
 
   static const storage = FlutterSecureStorage();
   final PeerTiming timing;
+  final ComputerStore computers;
+  final bool _ownsComputers;
   final InputBuffer _input;
   final _commands = Queue<({String message, Duration created})>();
   final _clock = Stopwatch()..start();
@@ -77,6 +85,9 @@ class PeerClient extends ChangeNotifier {
   bool _hadConnected = false, _pointer = false, _pending = false;
   bool _scroll = false, _keys = false;
   bool _keyboard = false;
+  bool _drag = false, _dragging = false, _dragSent = false;
+  bool _releaseDragPending = false, _dragKeepalive = false;
+  Timer? _dragHeartbeat;
   bool _stalled = false, _disposed = false;
   Duration _pendingSince = Duration.zero;
   String _message = '';
@@ -89,7 +100,12 @@ class PeerClient extends ChangeNotifier {
   bool get canKey => connected && _keys && !_stalled;
   bool get canKeyboard => connected && _keyboard && !_stalled;
   bool get supportsKeyboard => _keyboard;
-  String get desktopName => _address?.host ?? 'Your computer';
+  bool get supportsDrag => _drag;
+  bool get canDrag => ready && _drag;
+  bool get dragging => _dragging;
+  String? get activeComputerId => _pin;
+  String get desktopName =>
+      computers.find(_pin)?.name ?? _address?.host ?? 'Your computer';
   bool get busy =>
       state == PeerState.connecting ||
       state == PeerState.reconnecting ||
@@ -279,6 +295,7 @@ class PeerClient extends ChangeNotifier {
         _scroll = capabilities.contains(scrollCapability);
         _keys = capabilities.contains(keyCapability);
         _keyboard = capabilities.contains(keyboardCapability);
+        _drag = capabilities.contains(dragCapability);
         _hadConnected = true;
         _canRetry = true;
         _retryAttempt = 0;
@@ -286,6 +303,7 @@ class PeerClient extends ChangeNotifier {
         final onPaired = _onPaired;
         _onPaired = null;
         onPaired?.call();
+        if (generation != _generation) return;
         unawaited(_saveDesktop(generation));
         _heartbeat = Timer.periodic(timing.heartbeat, (_) {
           if (generation == _generation && !_pending) _send(hello(''));
@@ -313,11 +331,11 @@ class PeerClient extends ChangeNotifier {
   }
 
   Future<void> _saveDesktop(int generation) async {
+    final address = _address.toString();
+    final pin = _pin!;
     try {
-      await storage.write(
-        key: 'desktop_v1',
-        value: jsonEncode({'address': _address.toString(), 'pin': _pin}),
-      );
+      final saved = await computers.saveVerified(address, pin);
+      if (!saved) throw StateError('Could not save computer');
     } catch (_) {
       if (generation == _generation) {
         storageWarning =
@@ -334,13 +352,13 @@ class PeerClient extends ChangeNotifier {
   }
 
   void click(String button) {
-    if (!ready) return;
+    if (!ready || _dragging || _dragSent) return;
     _input.click(button, _clock.elapsed);
     _scheduleInput();
   }
 
   void scroll(double dx, double dy) {
-    if (!canScroll) return;
+    if (!canScroll || _dragging || _dragSent) return;
     _input.scroll(dx, dy, _clock.elapsed);
     _scheduleInput();
   }
@@ -348,6 +366,38 @@ class PeerClient extends ChangeNotifier {
   void pressKey(String key) {
     if (!canKey) return;
     _queueCommand(keyMessage(key));
+  }
+
+  bool startDrag() {
+    if (!canDrag || _dragging || _releaseDragPending) return false;
+    _dragging = true;
+    _input.clear();
+    _dragHeartbeat = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!_dragging) return;
+      _dragKeepalive = true;
+      _scheduleInput();
+    });
+    _scheduleInput();
+    _notify();
+    return true;
+  }
+
+  void cancelDrag() => endDrag(cancelled: true);
+
+  void endDrag({bool cancelled = false}) {
+    if (!_dragging) return;
+    _dragging = false;
+    _dragHeartbeat?.cancel();
+    _dragHeartbeat = null;
+    _dragKeepalive = false;
+    _releaseDragPending = _dragSent;
+    if (!_dragSent) {
+      _input.clear();
+      // A tap released before the next frame is still a normal left click.
+      if (ready && !cancelled) _input.click('left', _clock.elapsed);
+    }
+    _scheduleInput();
+    _notify();
   }
 
   bool typeText(String text) {
@@ -375,19 +425,43 @@ class PeerClient extends ChangeNotifier {
     }
   }
 
+  bool get _hasDragWork =>
+      _releaseDragPending || (_dragging && (!_dragSent || _dragKeepalive));
+
   void _scheduleInput() {
     _expireCommands();
     if (!connected ||
         _stalled ||
         _pending ||
         _frame != null ||
-        (_commands.isEmpty && (!ready || !_input.hasReady(_clock.elapsed)))) {
+        (!_hasDragWork &&
+            _commands.isEmpty &&
+            (!ready || !_input.hasReady(_clock.elapsed)))) {
       return;
     }
     _frame = Timer(timing.frameInterval, () {
       _frame = null;
       if (!connected || _stalled || _pending) return;
       _expireCommands();
+      if (_releaseDragPending) {
+        // Flush the last fresh movement before releasing, never replay stale input.
+        final input = _input.take(_clock.elapsed);
+        if (input != null && input.button == null && !input.isScroll) {
+          _send(dragMessage('move', input.dx, input.dy));
+        } else {
+          _releaseDragPending = false;
+          _dragSent = false;
+          _input.clear();
+          _send(dragMessage('end'));
+        }
+        return;
+      }
+      if (_dragging && !_dragSent) {
+        _dragSent = true;
+        _dragKeepalive = false;
+        _send(dragMessage('start'));
+        return;
+      }
       if (_commands.isNotEmpty) {
         _send(_commands.removeFirst().message);
         return;
@@ -395,11 +469,19 @@ class PeerClient extends ChangeNotifier {
       if (!ready) return;
       final input = _input.take(_clock.elapsed);
       if (input != null) {
-        _send(
-          input.isScroll
-              ? scrollMessage(input.dx, input.dy)
-              : pointer(input.dx, input.dy, input.button),
-        );
+        if (_dragging && _dragSent) {
+          _dragKeepalive = false;
+          _send(dragMessage('move', input.dx, input.dy));
+        } else {
+          _send(
+            input.isScroll
+                ? scrollMessage(input.dx, input.dy)
+                : pointer(input.dx, input.dy, input.button),
+          );
+        }
+      } else if (_dragging && _dragKeepalive) {
+        _dragKeepalive = false;
+        _send(dragMessage('hold'));
       }
     });
   }
@@ -421,6 +503,7 @@ class PeerClient extends ChangeNotifier {
       if (generation != _generation || !_pending) return;
       _input.clear();
       _stalled = true;
+      cancelDrag();
       _notify();
     });
     _deadline = Timer(timing.responseTimeout, () {
@@ -492,6 +575,10 @@ class PeerClient extends ChangeNotifier {
     _pending = _stalled = _pointer = false;
     _scroll = _keys = false;
     _keyboard = false;
+    _dragHeartbeat?.cancel();
+    _dragHeartbeat = null;
+    _drag = _dragging = _dragSent = _releaseDragPending = _dragKeepalive =
+        false;
     _commands.clear();
     _input.clear();
   }
@@ -510,6 +597,8 @@ class PeerClient extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    computers.removeListener(_notify);
+    if (_ownsComputers) computers.dispose();
     disconnect();
     super.dispose();
   }

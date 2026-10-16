@@ -10,6 +10,7 @@ const Pointer = "pointer.v1"
 const Scroll = "scroll.v1"
 const Key = "key.v1"
 const Keyboard = "keyboard.v1"
+const Drag = "drag.v1"
 
 type Message struct {
 	Version      int      `json:"version"`
@@ -19,6 +20,7 @@ type Message struct {
 	DX           int      `json:"dx,omitempty"`
 	DY           int      `json:"dy,omitempty"`
 	Button       string   `json:"button,omitempty"`
+	Action       string   `json:"action,omitempty"`
 	Key          string   `json:"key,omitempty"`
 	Text         string   `json:"text,omitempty"`
 	Modifiers    []string `json:"modifiers,omitempty"`
@@ -34,7 +36,7 @@ func Decode(raw []byte) (Message, error) {
 		return m, fmt.Errorf("unsupported protocol version")
 	}
 	switch m.Type {
-	case "hello", "pair", "ready", "pointer", "scroll", "key", "keyboard", "ack", "error":
+	case "hello", "pair", "ready", "pointer", "scroll", "key", "keyboard", "drag", "ack", "error":
 	default:
 		return m, fmt.Errorf("unknown message type")
 	}

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:linkpad_controller/control_deck.dart';
 import 'package:linkpad_controller/main.dart';
 import 'package:linkpad_controller/peer_client.dart';
+import 'package:linkpad_controller/cursor_settings.dart';
 
 class FakePeer extends PeerClient {
   FakePeer() {
@@ -55,7 +56,8 @@ void main() {
           theme: linkpadTheme(Brightness.light),
           home: AnimatedBuilder(
             animation: peer,
-            builder: (_, _) => ControlDeck(peer: peer),
+            builder: (_, _) =>
+                ControlDeck(peer: peer, settings: CursorSettings()),
           ),
         ),
       );
@@ -93,7 +95,11 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: linkpadTheme(Brightness.dark),
-            home: ControlDeck(key: ValueKey(size), peer: peer),
+            home: ControlDeck(
+              key: ValueKey(size),
+              peer: peer,
+              settings: CursorSettings(),
+            ),
           ),
         );
         await tester.ensureVisible(find.text('Keyboard'));
