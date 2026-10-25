@@ -79,7 +79,7 @@ func TestQRPairingCLIEnrollment(t *testing.T) {
 		}
 	}
 	if invitation.Address != "wss://"+address+"/ws" {
-		t.Fatal("QR has the wrong endpoint")
+		t.Fatalf("QR endpoint mismatch: got %q, want %q", invitation.Address, "wss://"+address+"/ws")
 	}
 	client, err := identity.Load(t.TempDir())
 	if err != nil {

@@ -15,10 +15,12 @@ class ServerController extends ChangeNotifier {
   ServerController({
     this.executable,
     this.stateDirectory,
+    this.settingsDirectory,
     this.listenAddress = '0.0.0.0:4747',
   });
   final String? executable;
   final String? stateDirectory;
+  final String? settingsDirectory;
   final String listenAddress;
   Process? _process;
   Future<void>? _operation;
@@ -27,8 +29,12 @@ class ServerController extends ChangeNotifier {
   bool busy = false;
   bool running = false;
   bool inputAvailable = false;
+  bool? inputPermissionGranted;
+  int inputCount = 0;
+  bool onboardingLoaded = false, setupCompleted = false, setupTested = false;
   bool _disposed = false;
   String address = '';
+  String addressError = '';
   String fingerprint = '';
   String inputError = '';
   String? error;
@@ -53,7 +59,9 @@ class ServerController extends ChangeNotifier {
 
   Future<void> initialize() async {
     try {
-      final dir = await getApplicationSupportDirectory();
+      final dir = settingsDirectory == null
+          ? await getApplicationSupportDirectory()
+          : Directory(settingsDirectory!);
       await dir.create(recursive: true);
       _settingsPath = '${dir.path}/desktop-names.json';
       final file = File(_settingsPath!);
@@ -66,7 +74,68 @@ class ServerController extends ChangeNotifier {
       error = 'Could not load device names. Server trust is unaffected.';
       _changed();
     }
+    var hadSetupFile = false;
+    try {
+      if (_settingsPath != null) {
+        final file = File(
+          '${File(_settingsPath!).parent.path}/desktop-setup.json',
+        );
+        hadSetupFile = await file.exists();
+        if (hadSetupFile) {
+          final saved = jsonDecode(await file.readAsString()) as Map;
+          setupCompleted = saved['completed'] == true;
+          setupTested = saved['tested'] == true;
+        }
+      }
+    } catch (_) {
+      error =
+          'Could not load setup progress. Your phone pairings are unaffected.';
+    }
     await start();
+    // Existing installations with trusted phones keep their regular dashboard.
+    if (!hadSetupFile) {
+      setupCompleted = peers.isNotEmpty;
+      try {
+        // Record fresh setup before a phone pairs, so an interrupted setup is
+        // distinguishable from an upgrade of a previously trusted installation.
+        await _saveSetupState(completed: setupCompleted, tested: false);
+      } catch (_) {
+        error =
+            'Could not save setup progress. Your phone pairings are unaffected.';
+      }
+    }
+    onboardingLoaded = true;
+    _changed();
+  }
+
+  void reviewSetup() {
+    setupCompleted = false;
+    _changed();
+  }
+
+  Future<void> completeSetup({required bool tested}) async {
+    await _saveSetupState(completed: true, tested: tested);
+    setupCompleted = true;
+    setupTested = tested;
+    _changed();
+  }
+
+  Future<void> _saveSetupState({
+    required bool completed,
+    required bool tested,
+  }) async {
+    if (_settingsPath == null) {
+      throw StateError(
+        'Setup progress could not be saved. Try reopening Linkpad.',
+      );
+    }
+    final path = '${File(_settingsPath!).parent.path}/desktop-setup.json';
+    final temporary = File('$path.tmp');
+    await temporary.writeAsString(
+      jsonEncode({'version': 1, 'completed': completed, 'tested': tested}),
+      flush: true,
+    );
+    await temporary.rename(path);
   }
 
   String _binary() {
@@ -103,7 +172,11 @@ class ServerController extends ChangeNotifier {
                 if (value['type'] != 'status') return;
                 running = value['running'] == true;
                 inputAvailable = value['inputAvailable'] == true;
+                inputPermissionGranted =
+                    value['inputPermissionGranted'] as bool?;
+                inputCount = (value['inputCount'] as num?)?.toInt() ?? 0;
                 address = value['address'] as String? ?? '';
+                addressError = value['addressError'] as String? ?? '';
                 fingerprint = value['fingerprint'] as String? ?? '';
                 inputError = value['inputError'] as String? ?? '';
                 pairing = value['pairing'] as Map<String, dynamic>?;

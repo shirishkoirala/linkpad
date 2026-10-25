@@ -100,6 +100,9 @@ func TestSecureLifecycle(t *testing.T) {
 	if *reply.ServerProcessingUS < fake.delay.Microseconds() {
 		t.Fatal("processing measurement excluded backend execution")
 	}
+	if n.InputCount() != 1 {
+		t.Fatal("successful remote input was not counted")
+	}
 	conn.Close()
 	fake.mu.Lock()
 	calls := fake.calls

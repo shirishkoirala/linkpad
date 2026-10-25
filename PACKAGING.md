@@ -85,7 +85,9 @@ current Docker build targets Ubuntu 24.04-compatible systems (glibc 2.39+) and
 requires an X11 desktop session. It does not add Wayland or login-screen input.
 Older distributions require a release bundle built against their libraries.
 
-For an upgrade, quit Linkpad and install the new `.deb` the same way. To remove
+For an upgrade, quit Linkpad and install the new `.deb` the same way. During
+development, if the version number has not changed, use
+`sudo apt install --reinstall ./linkpad_0.1.0_amd64.deb` to replace the old build. To remove
 it, turn off its login startup setting, quit the app, then run
 `sudo apt remove linkpad`. Pairing state is preserved. There are no maintainer
 scripts that start processes or edit users' home directories.

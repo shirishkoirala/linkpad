@@ -21,8 +21,8 @@ application.
 On macOS, enable Linkpad in **System Settings → Privacy & Security →
 Accessibility**, then choose **Restart server** in the app. macOS may identify the
 bundled `linkpad-server` helper or its responsible application in the permission
-list. Input permissions are checked at server startup; pairing works without
-input access. Rebuilding or moving an ad-hoc signed app can require granting
+list. Input permissions are checked at server startup and during guided recovery;
+first-install pairing waits for working input access. Rebuilding or moving an ad-hoc signed app can require granting
 permission again. For regular use, keep the app in a stable location such as
 Applications.
 
@@ -48,6 +48,23 @@ For several network interfaces, **Use a different network address** generates
 a code using an explicit `wss://LAN-IP:4747/ws` address. It does not change the
 listener or firewall rules. **Copy diagnostics** includes recent backend errors,
 but excludes pairing invitations and secrets.
+
+## First installation
+
+New installations show **Enable control → Connect phone → Try it**. On macOS,
+use **Open Accessibility settings**, enable Linkpad (or its responsible helper),
+and return. Linkpad rechecks actual access and refreshes its helper capabilities
+when needed. Setup from a mounted DMG first asks you to install in Applications.
+On Linux, working X11 sessions proceed directly to pairing; session/input errors
+receive Linux-specific recovery steps.
+
+The final test requires remote input activity and your confirmation that control
+works. **Test later** leaves the test deferred, with a **Test controls** action on
+the dashboard. **Start Linkpad when I sign in** is optional. Setup completion is
+stored in `desktop-setup.json` alongside desktop phone names, never with QR
+secrets. Existing trusted phones bypass fresh-install setup; ordinary reconnects
+do not restart onboarding. See `FIRST-RUN-UX.md` for details and physical-device
+validation requirements.
 
 ## Build on macOS
 

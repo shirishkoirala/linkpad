@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'desktop_platform.dart';
 import 'server_controller.dart';
+import 'desktop_setup_page.dart';
 
 class DesktopPage extends StatefulWidget {
   const DesktopPage({super.key, required this.server, this.platform});
@@ -41,6 +42,12 @@ class _DesktopPageState extends State<DesktopPage> {
       if (widget.platform != null) widget.platform!,
     ]),
     builder: (context, _) {
+      if (widget.platform != null && !server.onboardingLoaded) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      if (widget.platform != null && !server.setupCompleted) {
+        return DesktopSetupPage(server: server, platform: widget.platform!);
+      }
       final colors = Theme.of(context).colorScheme;
       final busy = server.busy || _commandBusy;
       return Scaffold(
@@ -429,7 +436,7 @@ class _DesktopPageState extends State<DesktopPage> {
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: !server.running || busy
+              onPressed: !server.running || !server.inputAvailable || busy
                   ? null
                   : () => _act(() => server.command('pair')),
               icon: const Icon(Icons.add_rounded),
@@ -473,7 +480,7 @@ class _DesktopPageState extends State<DesktopPage> {
             const SizedBox(height: 8),
             Text(
               Platform.isMacOS
-                  ? 'Enable Linkpad in System Settings → Privacy & Security → Accessibility. Then restart the server here.'
+                  ? 'Enable Linkpad in System Settings → Privacy & Security → Accessibility, then return here. Linkpad will check access automatically.'
                   : server.inputError,
               style: const TextStyle(height: 1.5),
             ),
@@ -484,16 +491,33 @@ class _DesktopPageState extends State<DesktopPage> {
               children: [
                 if (Platform.isMacOS && platform != null)
                   OutlinedButton(
-                    onPressed: () => _act(platform.openPermissions),
+                    onPressed: () => _act(platform.requestInputPermission),
                     child: const Text('Open Accessibility settings'),
                   ),
                 OutlinedButton(
-                  onPressed: server.busy ? null : () => _act(server.restart),
-                  child: const Text('Restart server'),
+                  onPressed: server.busy
+                      ? null
+                      : () => _act(
+                          platform == null
+                              ? server.restart
+                              : platform.checkInput,
+                        ),
+                  child: const Text('Check access'),
                 ),
               ],
             ),
             const Divider(height: 32),
+          ],
+          if (platform != null &&
+              server.setupCompleted &&
+              !server.setupTested) ...[
+            const Text(
+              'Your phone is paired. You can finish the control test whenever you are ready.',
+            ),
+            TextButton(
+              onPressed: server.reviewSetup,
+              child: const Text('Test controls'),
+            ),
           ],
           if (platform != null)
             SwitchListTile.adaptive(

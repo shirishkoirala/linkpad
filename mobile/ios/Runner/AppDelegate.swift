@@ -9,6 +9,12 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     flutterEngine.run()
+    FlutterMethodChannel(name: "linkpad/permissions", binaryMessenger: flutterEngine.binaryMessenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "openSettings" else { result(FlutterMethodNotImplemented); return }
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { result(false); return }
+        UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
+      }
     GeneratedPluginRegistrant.register(with: flutterEngine)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

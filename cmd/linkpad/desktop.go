@@ -103,7 +103,12 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 		if addressErr != nil {
 			addressError = addressErr.Error()
 		}
-		return encoder.Encode(map[string]any{"type": "status", "id": request, "running": true, "listen": listener.Addr().String(), "address": address, "addressError": addressError, "fingerprint": identity.Fingerprint(cert.Certificate[0]), "inputAvailable": len(registry) > 0, "inputError": inputError, "peers": peers, "pairing": invitation, "error": commandError})
+		trusted := allow && pointer.Available()
+		currentInputError := inputError
+		if allow && !trusted {
+			currentInputError = fmt.Sprint(pointer.AvailabilityError())
+		}
+		return encoder.Encode(map[string]any{"type": "status", "id": request, "running": true, "listen": listener.Addr().String(), "address": address, "addressError": addressError, "fingerprint": identity.Fingerprint(cert.Certificate[0]), "inputAvailable": len(registry) > 0 && trusted, "inputPermissionGranted": trusted, "inputCount": n.InputCount(), "inputError": currentInputError, "peers": peers, "pairing": invitation, "error": commandError})
 	}
 	if err := emit(0, ""); err != nil {
 		return err
@@ -127,6 +132,8 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 			var commandErr error
 			switch command.Command {
 			case "status":
+			case "requestInputPermission":
+				pointer.RequestPermission()
 			case "pair":
 				chosen := address
 				if command.Address != "" {

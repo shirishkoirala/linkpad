@@ -6,6 +6,7 @@ import 'cursor_settings.dart';
 import 'settings_page.dart';
 import 'pairing_invitation.dart';
 import 'pairing_scanner.dart';
+import 'phone_permissions.dart';
 
 class ControllerPage extends StatefulWidget {
   const ControllerPage({super.key, this.peer});
@@ -23,6 +24,7 @@ class _ControllerPageState extends State<ControllerPage>
       token = TextEditingController();
   ComputerStore get computers => peer.computers;
   String? selectedId;
+  final _manualDetails = ExpansibleController();
 
   @override
   void initState() {
@@ -47,6 +49,7 @@ class _ControllerPageState extends State<ControllerPage>
     address.dispose();
     pin.dispose();
     token.dispose();
+    _manualDetails.dispose();
     super.dispose();
   }
 
@@ -67,15 +70,79 @@ class _ControllerPageState extends State<ControllerPage>
     FocusScope.of(context).unfocus();
     peer.disconnect();
     token.clear();
-    final invitation = await Navigator.of(context).push<PairingInvitation>(
-      MaterialPageRoute(builder: (_) => const PairingScanner()),
-    );
-    if (!mounted || invitation == null) return;
+    if (computers.computers.isEmpty) {
+      final scan = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Connect to a computer'),
+          content: const Text(
+            'Open Linkpad on your computer and create a pairing code. Keep both devices on the same local network.\n\nAllow Camera when you scan. If iPhone asks for Local Network access while connecting, choose Allow.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Enter manually'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Scan code'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || scan == null) return;
+      if (!scan) {
+        _manualDetails.expand();
+        return;
+      }
+    }
+    final result = await Navigator.of(
+      context,
+    ).push<Object>(MaterialPageRoute(builder: (_) => const PairingScanner()));
+    if (!mounted) return;
+    if (result == PairingScannerAction.enterManually) {
+      _manualDetails.expand();
+      return;
+    }
+    if (result is! PairingInvitation) return;
+    final invitation = result;
     address.text = invitation.address;
     pin.text = invitation.fingerprint;
     token.text = invitation.secret;
     await _connect();
   }
+
+  Future<void> _connectionHelp() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Connect to your computer'),
+      content: const SingleChildScrollView(
+        child: Text(
+          'Check that Linkpad is running on the computer and both devices are on the same reachable local network.\n\nOn iPhone, open Settings → Apps → Linkpad and allow Local Network access. A connection timeout can also be caused by the network, a sleeping computer, or a firewall.\n\nIf a pairing code expired, create a new code on the computer.',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            final opened = await openPhoneSettings();
+            if (!opened && mounted) {
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                const SnackBar(
+                  content: Text('Open your phone settings and select Linkpad.'),
+                ),
+              );
+            }
+          },
+          child: const Text('Open Settings'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Done'),
+        ),
+      ],
+    ),
+  );
 
   Future<void> _rename(SavedComputer computer) async {
     final name = await showDialog<String>(
@@ -330,7 +397,13 @@ class _ControllerPageState extends State<ControllerPage>
                 ),
               ),
               const SizedBox(height: 12),
+              if (peer.state == PeerState.failed)
+                TextButton(
+                  onPressed: _connectionHelp,
+                  child: const Text('Connection help'),
+                ),
               ExpansionTile(
+                controller: _manualDetails,
                 title: const Text(
                   'Enter pairing details',
                   style: TextStyle(fontSize: 13),

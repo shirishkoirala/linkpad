@@ -6,6 +6,10 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'server_controller.dart';
 
+bool macInstallationNeedsMove(String executable) =>
+    executable.startsWith('/Volumes/') ||
+    executable.contains('/AppTranslocation/');
+
 class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   DesktopPlatform(this.server);
   final ServerController server;
@@ -15,6 +19,11 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   bool _quitting = false;
   String? error;
   bool? _menuRunning;
+  bool permissionCheckBusy = false;
+  bool _awaitingPermission = false;
+  bool get isMacOS => Platform.isMacOS;
+  bool get launchedFromDiskImage =>
+      isMacOS && macInstallationNeedsMove(Platform.resolvedExecutable);
 
   Future<void> initialize() async {
     await windowManager.ensureInitialized();
@@ -64,6 +73,61 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
 
   void _serverChanged() {
     if (trayReady && _menuRunning != server.running) unawaited(_updateMenu());
+    if (_awaitingPermission &&
+        server.inputPermissionGranted == true &&
+        !server.busy &&
+        !permissionCheckBusy) {
+      unawaited(checkInput());
+    }
+  }
+
+  Future<void> requestInputPermission() async {
+    if (!isMacOS) return;
+    _awaitingPermission = true;
+    if (server.running) await server.command('requestInputPermission');
+    await openPermissions();
+  }
+
+  Future<void> checkInput() async {
+    if (permissionCheckBusy || server.busy) return;
+    permissionCheckBusy = true;
+    notifyListeners();
+    try {
+      if (!server.running) {
+        await server.start();
+      } else {
+        await server.command('status');
+        if (!server.inputAvailable &&
+            (!isMacOS || server.inputPermissionGranted == true)) {
+          // Capabilities are registered when the helper starts. Restart once,
+          // rather than mutating a registry used by active network sessions.
+          _awaitingPermission = false;
+          await server.restart();
+          if (!server.inputAvailable) {
+            error =
+                'Input is still unavailable. Quit and reopen Linkpad, then check again.';
+          }
+        }
+      }
+      if (server.inputAvailable) {
+        _awaitingPermission = false;
+        error = null;
+      }
+    } catch (_) {
+      error = 'Could not check desktop control. Try again or reopen Linkpad.';
+    } finally {
+      permissionCheckBusy = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void onWindowFocus() {
+    if (_awaitingPermission) unawaited(checkInput());
+  }
+
+  Future<void> openApplications() async {
+    if (isMacOS) await Process.run('/usr/bin/open', ['/Applications']);
   }
 
   Future<void> _updateMenu() async {
@@ -126,7 +190,7 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   }
 
   Future<void> openPermissions() async {
-    if (!Platform.isMacOS) return;
+    if (!isMacOS) return;
     await Process.run('/usr/bin/open', [
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
     ]);

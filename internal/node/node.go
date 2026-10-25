@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,6 +50,7 @@ func (p *Pairing) authorize(token string, save func() error) error {
 }
 
 type Node struct {
+	inputCount     atomic.Uint64
 	Trust          *Trust
 	Pairing        *Pairing
 	Plugins        plugins.Registry
@@ -60,6 +62,9 @@ type Node struct {
 	management     sync.Mutex
 	sessions       map[*websocket.Conn]string
 }
+
+// InputCount counts successful remote actions without retaining their contents.
+func (n *Node) InputCount() uint64 { return n.inputCount.Load() }
 
 func (n *Node) TLS(cert tls.Certificate) *tls.Config {
 	return &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAnyClientCert}
@@ -199,6 +204,7 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 			reject(err.Error())
 			return
 		}
+		n.inputCount.Add(1)
 		processingUS := time.Since(processingStarted).Microseconds()
 		if err = send(protocol.Message{Version: 1, Type: "ack", ServerProcessingUS: &processingUS}); err != nil {
 			return

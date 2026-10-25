@@ -6,6 +6,15 @@ package pointer
 #cgo LDFLAGS: -framework ApplicationServices
 #include <ApplicationServices/ApplicationServices.h>
 static int permitted() { return AXIsProcessTrusted(); }
+static int requestPermission() {
+ const void *keys[] = { kAXTrustedCheckOptionPrompt };
+ const void *values[] = { kCFBooleanTrue };
+ CFDictionaryRef options = CFDictionaryCreate(NULL, keys, values, 1,
+   &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+ int trusted = AXIsProcessTrustedWithOptions(options);
+ CFRelease(options);
+ return trusted;
+}
 static int pressKey(int keycode) {
  if (!AXIsProcessTrusted()) return 0;
  CGEventRef down=CGEventCreateKeyboardEvent(NULL,(CGKeyCode)keycode,true);
@@ -43,7 +52,8 @@ static int movePointer(int dx, int dy, int button) {
 import "C"
 import "fmt"
 
-func Available() bool { return C.permitted() != 0 }
+func Available() bool    { return C.permitted() != 0 }
+func RequestPermission() { C.requestPermission() }
 func AvailabilityError() error {
 	if Available() {
 		return nil
