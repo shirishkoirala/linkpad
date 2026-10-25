@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'design_system.dart';
 import 'cursor_settings.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -14,30 +15,18 @@ class SettingsPage extends StatelessWidget {
         builder: (context, _) {
           final colors = Theme.of(context).colorScheme;
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: LinkpadStyle.pagePadding,
             children: [
               Icon(Icons.tune, size: 32, color: colors.primary),
               const SizedBox(height: 24),
-              const Text(
-                'Find your pace.',
-                style: TextStyle(
-                  fontSize: 32,
-                  letterSpacing: -1,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              const Text('Find your pace.', style: LinkpadStyle.pageTitle),
               const SizedBox(height: 12),
               Text(
                 'Make the pointer feel right for you.',
                 style: TextStyle(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  border: Border.all(color: colors.outlineVariant),
-                  borderRadius: BorderRadius.circular(22),
-                ),
+              LinkpadPanel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -46,10 +35,7 @@ class SettingsPage extends StatelessWidget {
                         const Expanded(
                           child: Text(
                             'Cursor sensitivity',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: LinkpadStyle.cardTitle,
                           ),
                         ),
                         Text(
@@ -123,13 +109,7 @@ class SettingsPage extends StatelessWidget {
               ),
               if (settings.warning != null) ...[
                 const SizedBox(height: 20),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    settings.warning!,
-                    style: TextStyle(color: colors.error),
-                  ),
-                ),
+                LinkpadNotice(message: settings.warning!, error: true),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
@@ -137,6 +117,28 @@ class SettingsPage extends StatelessWidget {
                     child: const Text('Try saving again'),
                   ),
                 ),
+              ],
+              const SizedBox(height: 24),
+              LinkpadPanel(
+                child: SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Keep screen awake',
+                    style: LinkpadStyle.cardTitle,
+                  ),
+                  subtitle: const Text(
+                    'Prevent automatic screen lock while Linkpad is open and connected to a computer.',
+                  ),
+                  value: settings.keepScreenAwake,
+                  onChanged: (value) {
+                    settings.setKeepScreenAwake(value);
+                    settings.save();
+                  },
+                ),
+              ),
+              if (settings.awakeWarning != null) ...[
+                const SizedBox(height: 16),
+                LinkpadNotice(message: settings.awakeWarning!, error: true),
               ],
             ],
           );

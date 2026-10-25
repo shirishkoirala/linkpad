@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../design_system.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'desktop_platform.dart';
@@ -53,7 +54,7 @@ class _DesktopPageState extends State<DesktopPage> {
       return Scaffold(
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(36, 30, 36, 28),
+            padding: LinkpadStyle.pagePadding,
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1120),
@@ -62,37 +63,7 @@ class _DesktopPageState extends State<DesktopPage> {
                   children: [
                     Row(
                       children: [
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: colors.primary,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Icon(
-                            Icons.touch_app_rounded,
-                            color: colors.onPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Text(
-                          'Linkpad',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -1,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'DESKTOP',
-                          style: TextStyle(
-                            fontSize: 10,
-                            letterSpacing: 2,
-                            fontWeight: FontWeight.w700,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
+                        const LinkpadBrand(label: 'DESKTOP'),
                         const Spacer(),
                         IconButton(
                           tooltip: 'Copy diagnostics',
@@ -120,12 +91,7 @@ class _DesktopPageState extends State<DesktopPage> {
                       server.running
                           ? 'Your phone. Your controls.'
                           : 'A little closer to your computer.',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        height: 1.15,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -1.1,
-                      ),
+                      style: LinkpadStyle.pageTitle,
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -186,10 +152,10 @@ class _DesktopPageState extends State<DesktopPage> {
   Widget _status(bool busy) {
     final colors = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: LinkpadStyle.panelPadding,
       decoration: BoxDecoration(
         color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: LinkpadStyle.panelRadius,
       ),
       child: Row(
         children: [
@@ -212,10 +178,7 @@ class _DesktopPageState extends State<DesktopPage> {
                       : server.running
                       ? 'Server is running'
                       : 'Server is stopped',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
+                  style: LinkpadStyle.cardTitle,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -248,10 +211,7 @@ class _DesktopPageState extends State<DesktopPage> {
       children: [
         Row(
           children: [
-            const Text(
-              'Your phones',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
+            const Text('Your phones', style: LinkpadStyle.sectionTitle),
             const Spacer(),
             Text('${server.peers.length} paired'),
           ],
@@ -277,10 +237,7 @@ class _DesktopPageState extends State<DesktopPage> {
                   server.running
                       ? 'Ready for your first phone'
                       : 'Your devices will appear here',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: LinkpadStyle.cardTitle,
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -378,10 +335,7 @@ class _DesktopPageState extends State<DesktopPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Pair a phone',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
+          const Text('Pair a phone', style: LinkpadStyle.sectionTitle),
           const SizedBox(height: 8),
           Text(
             'Keep both devices on the same network.',
@@ -473,10 +427,7 @@ class _DesktopPageState extends State<DesktopPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (server.running && !server.inputAvailable) ...[
-            const Text(
-              'Allow desktop control',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
+            const Text('Allow desktop control', style: LinkpadStyle.cardTitle),
             const SizedBox(height: 8),
             Text(
               Platform.isMacOS
@@ -544,26 +495,10 @@ class _DesktopPageState extends State<DesktopPage> {
     );
   }
 
-  Widget _panel({required Widget child}) => Container(
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(
-      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-      borderRadius: BorderRadius.circular(22),
-    ),
-    child: child,
-  );
-  Widget _notice(String message) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.errorContainer,
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Text(
-      message,
-      style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
-    ),
-  );
+  Widget _panel({required Widget child}) => LinkpadPanel(child: child);
+
+  Widget _notice(String message) =>
+      LinkpadNotice(message: message, error: true);
 
   Future<void> _copy(String value, String message) async {
     await Clipboard.setData(ClipboardData(text: value));

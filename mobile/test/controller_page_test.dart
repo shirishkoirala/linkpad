@@ -141,7 +141,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await pump(tester);
-    await tester.ensureVisible(connect(a));
+    await tester.scrollUntilVisible(connect(a), 200);
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);

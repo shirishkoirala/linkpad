@@ -23,4 +23,5 @@ dev_dependencies:
 flutter:
   assets:
     - assets/branding/tray-icon.png
+    - assets/branding/linkpad-icon-source.png
   uses-material-design: true

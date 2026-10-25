@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../design_system.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'desktop_platform.dart';
 import 'server_controller.dart';
@@ -104,7 +105,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
       final labels = ['Enable control', 'Connect phone', 'Try it'];
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Linkpad · Setup'),
+          title: const LinkpadBrand(label: 'SETUP'),
           actions: [
             TextButton(
               onPressed: busy ? null : () => _act(platform.quit),
@@ -114,7 +115,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
         ),
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
+            padding: LinkpadStyle.pagePadding,
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 820),
@@ -123,11 +124,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
                   children: [
                     const Text(
                       'Your phone. Your computer. Connected.',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -1,
-                      ),
+                      style: LinkpadStyle.pageTitle,
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -174,27 +171,12 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
                     const SizedBox(height: 28),
                     if (_error ?? platform.error ?? server.error
                         case final String message) ...[
-                      Semantics(
-                        liveRegion: true,
-                        child: Text(
-                          message,
-                          style: TextStyle(color: colors.error),
-                        ),
-                      ),
+                      LinkpadNotice(message: message, error: true),
                       const SizedBox(height: 16),
                     ],
-                    Container(
-                      padding: const EdgeInsets.all(24),
+                    SizedBox(
                       width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest.withValues(
-                          alpha: .4,
-                        ),
-                        border: Border.all(color: colors.outlineVariant),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Material(
-                        type: MaterialType.transparency,
+                      child: LinkpadPanel(
                         child: switch (step) {
                           0 => _control(busy),
                           1 => _pair(busy),
@@ -227,10 +209,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
       children: [
         Icon(icon, size: 32, color: Theme.of(context).colorScheme.primary),
         const SizedBox(height: 16),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w500),
-        ),
+        Text(title, style: LinkpadStyle.sectionTitle),
       ],
     ),
   );

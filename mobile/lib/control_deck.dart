@@ -1,5 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'design_system.dart';
+import 'mobile_controls.dart';
 import 'peer_client.dart';
 import 'relative_touchpad.dart';
 import 'cursor_settings.dart';
@@ -18,31 +21,78 @@ class ControlDeck extends StatefulWidget {
 class _ControlDeckState extends State<ControlDeck> {
   bool keyboard = false, arrows = true, shift = false, symbols = false;
   final modifiers = <String>{};
+  bool _remoteOpen = false, _restoringRemote = false;
   PeerClient get peer => widget.peer;
   ColorScheme get colors => Theme.of(context).colorScheme;
-  Future<void> _openRemote() async {
+  @override
+  void initState() {
+    super.initState();
+    keyboard = widget.settings.lastControlMode == MobileControlMode.keyboard;
+    _restoringRemote =
+        widget.settings.lastControlMode == MobileControlMode.remote;
+    if (_restoringRemote) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _restoringRemote = false);
+        _openRemote(restoring: true);
+      });
+    }
+  }
+
+  void _rememberMode(MobileControlMode mode) {
+    widget.settings.setLastControlMode(mode);
+    widget.settings.save();
+  }
+
+  Future<void> _openRemote({bool restoring = false}) async {
+    if (_remoteOpen) return;
+    _remoteOpen = true;
     peer.cancelDrag();
-    final mode = await Navigator.of(context).push<RemoteSelection>(
-      MaterialPageRoute(
-        builder: (_) => RemotePage(
-          peer: peer,
-          onSettings: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => SettingsPage(settings: widget.settings),
+    if (!restoring) _rememberMode(MobileControlMode.remote);
+    final RemoteSelection? selection;
+    try {
+      selection = await Navigator.of(context).push<RemoteSelection>(
+        PageRouteBuilder<RemoteSelection>(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, _, _) => RemotePage(
+            peer: peer,
+            settings: widget.settings,
+            onSettings: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SettingsPage(settings: widget.settings),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    if (!mounted || mode == null) return;
+      );
+    } finally {
+      _remoteOpen = false;
+    }
+    if (!mounted) return;
+    if (selection == null) {
+      // Disconnecting from Remote should preserve it for the next connection.
+      // A system Back on an active session returns to the underlying mode.
+      if (peer.connected || peer.showControls) {
+        _rememberMode(
+          keyboard ? MobileControlMode.keyboard : MobileControlMode.touchpad,
+        );
+      }
+      return;
+    }
+    final selected = selection;
+    final next = selected.mode == 'keyboard'
+        ? MobileControlMode.keyboard
+        : MobileControlMode.touchpad;
+    _rememberMode(next);
     setState(() {
-      keyboard = mode.mode == 'keyboard';
+      keyboard = next == MobileControlMode.keyboard;
       modifiers
         ..clear()
         ..addAll(
-          keyboard ? mode.modifiers.where((m) => m != 'shift') : <String>[],
+          keyboard ? selected.modifiers.where((m) => m != 'shift') : <String>[],
         );
-      shift = keyboard && mode.modifiers.contains('shift');
+      shift = keyboard && selected.modifiers.contains('shift');
     });
   }
 
@@ -65,53 +115,6 @@ class _ControlDeckState extends State<ControlDeck> {
     }
   }
 
-  void _gestures() => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) => const SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Make yourself comfortable.',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 20),
-            ListTile(
-              leading: Icon(Icons.swipe),
-              title: Text('One finger moves the pointer'),
-            ),
-            ListTile(
-              leading: Icon(Icons.touch_app),
-              title: Text('Tap to left click'),
-            ),
-            ListTile(
-              leading: Icon(Icons.pan_tool_alt),
-              title: Text('Two fingers scroll'),
-            ),
-            ListTile(
-              leading: Icon(Icons.mouse_outlined),
-              title: Text('Two-finger tap to right click'),
-            ),
-            ListTile(
-              leading: Icon(Icons.open_with),
-              title: Text('Hold Left click and move on the touchpad to drag'),
-              subtitle: Text(
-                'Release Left click to drop. Requires the updated desktop server.',
-              ),
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Modifiers apply to the next key only. Super is Command on Mac and the Windows key on Linux.',
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.settings,
@@ -119,6 +122,9 @@ class _ControlDeckState extends State<ControlDeck> {
   );
 
   Widget _buildDeck(BuildContext context) {
+    if (_restoringRemote) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (!peer.canKeyboard) {
       modifiers.clear();
       shift = false;
@@ -128,323 +134,167 @@ class _ControlDeckState extends State<ControlDeck> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
           if (keyboard) {
-            setState(() => keyboard = false);
+            _selectMode(MobileControlMode.touchpad);
           } else {
             peer.disconnect();
           }
         }
       },
-      child: Scaffold(
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final height = math.max(
-                constraints.maxHeight,
-                keyboard ? 730.0 : 480.0,
-              );
-              return SingleChildScrollView(
-                physics: height > constraints.maxHeight
-                    ? const ClampingScrollPhysics()
-                    : const NeverScrollableScrollPhysics(),
-                child: SizedBox(
-                  height: height,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: peer.disconnect,
-                              tooltip: 'Disconnect and return to computers',
-                              icon: const Icon(Icons.chevron_left),
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    peer.desktopName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    peer.connectionSummary,
-                                    maxLines: 2,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: colors.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Tooltip(
-                              message: peer.connectionDetails,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Icon(
-                                  peer.connected ? Icons.wifi : Icons.wifi_off,
-                                  size: 20,
-                                  color: colors.primary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        if (!peer.ready || peer.storageWarning != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: colors.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                peer.storageWarning ??
-                                    (peer.waitingForResponse
-                                        ? 'Connection is slow. Waiting for your computer to respond…'
-                                        : peer.connected
-                                        ? 'Desktop input unavailable. Check the desktop server permissions.'
-                                        : 'Controls paused while we reconnect.'),
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ),
-                          ),
-                        Expanded(
-                          key: const ValueKey('control-deck-touchpad'),
-                          child: Semantics(
-                            label:
-                                'Touchpad. Drag to move, tap to click, two fingers to scroll or right click.',
-                            enabled: peer.ready,
-                            child: RelativeTouchpad(
-                              enabled: peer.ready,
-                              onMove: (dx, dy) => peer.move(
-                                dx * widget.settings.sensitivity,
-                                dy * widget.settings.sensitivity,
-                              ),
-                              onClick: peer.click,
-                              onScroll: peer.canScroll ? peer.scroll : null,
-                              child: CustomPaint(
-                                painter: _Dots(colors.outlineVariant),
-                                child: Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: colors.outlineVariant,
-                                    ),
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Container(
-                                    color: colors.surface,
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (!keyboard) ...[
-                                          Icon(
-                                            Icons.fingerprint,
-                                            size: 32,
-                                            color: colors.primary,
-                                          ),
-                                          const SizedBox(height: 14),
-                                        ],
-                                        Text(
-                                          peer.ready
-                                              ? 'Room to move.'
-                                              : 'Waiting for your computer…',
-                                          style: const TextStyle(fontSize: 16),
-                                        ),
-                                        if (!keyboard) ...[
-                                          const SizedBox(height: 10),
-                                          Text(
-                                            'One finger moves · Tap to click\nTwo fingers scroll · Tap for right click',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              height: 1.8,
-                                              color: colors.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: HoldClickButton(
-                                enabled: peer.ready,
-                                supportsDrag: peer.supportsDrag,
-                                holding: peer.dragging,
-                                onStart: peer.startDrag,
-                                onEnd: peer.endDrag,
-                                onCancel: peer.cancelDrag,
-                                onClick: () => peer.click('left'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _button(
-                                'Right click',
-                                () => peer.click('right'),
-                                enabled: peer.ready,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (arrows && !keyboard) ...[
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              for (final item in [
-                                (Icons.arrow_back, 'left'),
-                                (Icons.arrow_upward, 'up'),
-                                (Icons.arrow_downward, 'down'),
-                                (Icons.arrow_forward, 'right'),
-                              ])
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 3,
-                                    ),
-                                    child: IconButton.filledTonal(
-                                      onPressed: peer.canKey
-                                          ? () => peer.pressKey(item.$2)
-                                          : null,
-                                      tooltip: '${item.$2} arrow',
-                                      icon: Icon(item.$1),
-                                      style: IconButton.styleFrom(
-                                        minimumSize: const Size(44, 50),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            13,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                        if (keyboard) ...[
-                          const SizedBox(height: 12),
-                          if (!peer.supportsKeyboard)
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(
-                                peer.connected
-                                    ? 'Update your desktop server to enable the keyboard.'
-                                    : 'Keyboard paused until the connection returns.',
-                                style: TextStyle(
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          _keyboard(),
-                        ],
-                        const SizedBox(height: 12),
-                        Divider(height: 1, color: colors.outlineVariant),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            _nav(
-                              Icons.gamepad_outlined,
-                              'Remote',
-                              false,
-                              _openRemote,
-                            ),
-                            _nav(
-                              Icons.keyboard_outlined,
-                              'Keyboard',
-                              keyboard,
-                              () => setState(() {
-                                keyboard = !keyboard;
-                                modifiers.clear();
-                                shift = false;
-                              }),
-                            ),
-                            _nav(
-                              Icons.pan_tool_outlined,
-                              'Gestures',
-                              false,
-                              _gestures,
-                            ),
-                            _nav(
-                              Icons.desktop_windows_outlined,
-                              'Computers',
-                              false,
-                              peer.disconnect,
-                            ),
-                            _nav(
-                              Icons.settings_outlined,
-                              'Settings',
-                              false,
-                              () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      SettingsPage(settings: widget.settings),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
+      child: MobileControlScaffold(
+        peer: peer,
+        mode: keyboard
+            ? MobileControlMode.keyboard
+            : MobileControlMode.touchpad,
+        onModeChanged: _selectMode,
+        onBack: peer.disconnect,
+        backTooltip: 'Disconnect and return to computers',
+        onComputers: peer.disconnect,
+        onSettings: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => SettingsPage(settings: widget.settings),
           ),
         ),
+        bodyBuilder: (context, constraints) {
+          final height = math.max(
+            constraints.maxHeight,
+          keyboard ? 600.0 : 360.0,
+          );
+          return SingleChildScrollView(
+            physics: height > constraints.maxHeight
+                ? const ClampingScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            child: SizedBox(
+              height: height,
+              child: Column(
+                children: [
+                  MobileControlNotice(peer: peer),
+                  Expanded(
+                    key: const ValueKey('control-deck-touchpad'),
+                    child: Semantics(
+                      label:
+                          'Touchpad. Drag to move, tap to click, two fingers to scroll or right click.',
+                      enabled: peer.ready,
+                      child: RawGestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        gestures: {
+                          EagerGestureRecognizer:
+                              GestureRecognizerFactoryWithHandlers<
+                                EagerGestureRecognizer
+                              >(() => EagerGestureRecognizer(), (_) {}),
+                        },
+                        child: RelativeTouchpad(
+                          enabled: peer.ready,
+                          onMove: (dx, dy) => peer.move(
+                            dx * widget.settings.sensitivity,
+                            dy * widget.settings.sensitivity,
+                          ),
+                          onClick: peer.click,
+                          onScroll: peer.canScroll ? peer.scroll : null,
+                          child: MobileControlSurface(
+                            child: TouchpadHint(
+                              ready: peer.ready,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: HoldClickButton(
+                          enabled: peer.ready,
+                          supportsDrag: peer.supportsDrag,
+                          holding: peer.dragging,
+                          onStart: peer.startDrag,
+                          onEnd: peer.endDrag,
+                          onCancel: peer.cancelDrag,
+                          onClick: () => peer.click('left'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _button(
+                          'Right click',
+                          () => peer.click('right'),
+                          enabled: peer.ready,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (arrows && !keyboard) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        for (final item in [
+                          (Icons.arrow_back, 'left'),
+                          (Icons.arrow_upward, 'up'),
+                          (Icons.arrow_downward, 'down'),
+                          (Icons.arrow_forward, 'right'),
+                        ])
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                              ),
+                              child: IconButton.filledTonal(
+                                onPressed: peer.canKey
+                                    ? () => peer.pressKey(item.$2)
+                                    : null,
+                                tooltip: '${item.$2} arrow',
+                                icon: Icon(item.$1),
+                                style: IconButton.styleFrom(
+                                  minimumSize: const Size(44, 50),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(13),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (keyboard) ...[
+                    const SizedBox(height: 12),
+                    if (!peer.supportsKeyboard)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          peer.connected
+                              ? 'Update your desktop server to enable the keyboard.'
+                              : 'Keyboard paused until the connection returns.',
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                      ),
+                    _keyboard(),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _nav(
-    IconData icon,
-    String label,
-    bool selected,
-    VoidCallback action,
-  ) => Expanded(
-    child: Semantics(
-      selected: selected,
-      child: TextButton(
-        onPressed: action,
-        style: TextButton.styleFrom(
-          foregroundColor: selected ? colors.primary : colors.onSurfaceVariant,
-          backgroundColor: selected ? colors.surfaceContainerHighest : null,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 21),
-            const SizedBox(height: 5),
-            Text(label, style: const TextStyle(fontSize: 11)),
-          ],
-        ),
-      ),
-    ),
-  );
+  void _selectMode(MobileControlMode mode) {
+    if (mode == MobileControlMode.remote) {
+      _openRemote();
+      return;
+    }
+    final next = mode == MobileControlMode.keyboard;
+    if (keyboard == next) return;
+    peer.cancelDrag();
+    _rememberMode(mode);
+    setState(() {
+      keyboard = next;
+      modifiers.clear();
+      shift = false;
+    });
+  }
+
   Widget _button(
     String label,
     VoidCallback action, {
@@ -459,7 +309,7 @@ class _ControlDeckState extends State<ControlDeck> {
           ? colors.primary
           : colors.surfaceContainerHighest,
       foregroundColor: selected ? colors.onPrimary : colors.onSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: LinkpadStyle.keyRadius),
     ),
     child: Text(label, maxLines: 1, style: const TextStyle(fontSize: 13)),
   );
@@ -530,7 +380,7 @@ class _ControlDeckState extends State<ControlDeck> {
                         minimumSize: const Size(0, 48),
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: LinkpadStyle.keyRadius,
                         ),
                       ),
                     ),
@@ -551,26 +401,4 @@ class _ControlDeckState extends State<ControlDeck> {
       ],
     );
   }
-}
-
-class _Dots extends CustomPainter {
-  _Dots(this.color);
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.clipRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(25)),
-    );
-    final paint = Paint()..color = color;
-    for (double x = 12; x < size.width; x += 18) {
-      for (double y = 12; y < size.height; y += 18) {
-        canvas.drawCircle(Offset(x, y), 0.8, paint);
-      }
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_Dots oldDelegate) => oldDelegate.color != color;
 }

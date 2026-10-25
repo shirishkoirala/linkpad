@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'design_system.dart';
 import 'computer_store.dart';
 import 'peer_client.dart';
 import 'control_deck.dart';
@@ -7,6 +8,7 @@ import 'settings_page.dart';
 import 'pairing_invitation.dart';
 import 'pairing_scanner.dart';
 import 'phone_permissions.dart';
+import 'screen_awake.dart';
 
 class ControllerPage extends StatefulWidget {
   const ControllerPage({super.key, this.peer});
@@ -18,12 +20,14 @@ class ControllerPage extends StatefulWidget {
 class _ControllerPageState extends State<ControllerPage>
     with WidgetsBindingObserver {
   late final PeerClient peer;
+  late final ScreenAwakeController _screenAwake;
   final settings = CursorSettings();
   final address = TextEditingController(),
       pin = TextEditingController(),
       token = TextEditingController();
   ComputerStore get computers => peer.computers;
   String? selectedId;
+  bool _settingsReady = false;
   final _manualDetails = ExpansibleController();
 
   @override
@@ -34,16 +38,32 @@ class _ControllerPageState extends State<ControllerPage>
     peer.setForeground(
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
     );
+    _screenAwake = ScreenAwakeController(
+      settings: settings,
+      peer: peer,
+      foreground:
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+    );
     computers.load();
-    settings.load();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    await settings.load();
+    if (mounted) setState(() => _settingsReady = true);
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) =>
-      peer.setForeground(state == AppLifecycleState.resumed);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    _screenAwake.setForeground(foreground);
+    peer.setForeground(foreground);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _screenAwake.dispose();
     if (widget.peer == null) peer.dispose();
     settings.dispose();
     address.dispose();
@@ -198,14 +218,9 @@ class _ControllerPageState extends State<ControllerPage>
 
   Widget _computer(SavedComputer computer, ColorScheme colors) {
     final connecting = peer.busy && selectedId == computer.id;
-    return Container(
+    return LinkpadPanel(
       key: ValueKey(computer.id),
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        border: Border.all(color: colors.outlineVariant),
-        borderRadius: BorderRadius.circular(22),
-      ),
+      margin: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -215,7 +230,7 @@ class _ControllerPageState extends State<ControllerPage>
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: LinkpadStyle.controlRadius,
                 ),
                 child: const Icon(Icons.desktop_windows_outlined),
               ),
@@ -228,10 +243,7 @@ class _ControllerPageState extends State<ControllerPage>
                       computer.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: LinkpadStyle.cardTitle,
                     ),
                     const SizedBox(height: 5),
                     Text(
@@ -280,26 +292,24 @@ class _ControllerPageState extends State<ControllerPage>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: peer,
     builder: (context, _) {
-      if (peer.showControls) return ControlDeck(peer: peer, settings: settings);
+      if (peer.showControls) {
+        if (!_settingsReady) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return ControlDeck(peer: peer, settings: settings);
+      }
       final colors = Theme.of(context).colorScheme;
       final saved = computers.computers;
       return Scaffold(
         body: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.all(24),
+            padding: LinkpadStyle.pagePadding,
             children: [
               Row(
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'linkpad',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                  ),
+                  const Expanded(child: LinkpadBrand()),
                   IconButton(
                     tooltip: 'Settings',
                     icon: const Icon(Icons.settings_outlined),
@@ -314,9 +324,7 @@ class _ControllerPageState extends State<ControllerPage>
               const SizedBox(height: 32),
               Text(
                 'PHONE MEETS DESKTOP',
-                style: TextStyle(
-                  fontSize: 11,
-                  letterSpacing: 1.8,
+                style: LinkpadStyle.eyebrow.copyWith(
                   color: colors.onSurfaceVariant,
                 ),
               ),
@@ -347,13 +355,7 @@ class _ControllerPageState extends State<ControllerPage>
                 const SizedBox(height: 20),
               ],
               if (computers.warning != null) ...[
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    computers.warning!,
-                    style: TextStyle(color: colors.error),
-                  ),
-                ),
+                LinkpadNotice(message: computers.warning!, error: true),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
@@ -367,20 +369,14 @@ class _ControllerPageState extends State<ControllerPage>
                 const SizedBox(height: 12),
               ],
               if (saved.isNotEmpty) ...[
-                const Text(
-                  'SAVED COMPUTERS',
-                  style: TextStyle(fontSize: 11, letterSpacing: 1.8),
-                ),
+                const Text('SAVED COMPUTERS', style: LinkpadStyle.eyebrow),
                 const SizedBox(height: 12),
                 for (final computer in saved) _computer(computer, colors),
               ],
               if (peer.state != PeerState.disconnected) ...[
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    peer.status,
-                    style: TextStyle(color: colors.onSurfaceVariant),
-                  ),
+                LinkpadNotice(
+                  message: peer.status,
+                  error: peer.state == PeerState.failed,
                 ),
                 const SizedBox(height: 12),
               ],
