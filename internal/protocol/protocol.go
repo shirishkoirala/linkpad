@@ -13,18 +13,19 @@ const Keyboard = "keyboard.v1"
 const Drag = "drag.v1"
 
 type Message struct {
-	Version      int      `json:"version"`
-	Type         string   `json:"type"`
-	Token        string   `json:"token,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	DX           int      `json:"dx,omitempty"`
-	DY           int      `json:"dy,omitempty"`
-	Button       string   `json:"button,omitempty"`
-	Action       string   `json:"action,omitempty"`
-	Key          string   `json:"key,omitempty"`
-	Text         string   `json:"text,omitempty"`
-	Modifiers    []string `json:"modifiers,omitempty"`
-	Error        string   `json:"error,omitempty"`
+	Version            int      `json:"version"`
+	Type               string   `json:"type"`
+	Token              string   `json:"token,omitempty"`
+	Capabilities       []string `json:"capabilities,omitempty"`
+	DX                 int      `json:"dx,omitempty"`
+	DY                 int      `json:"dy,omitempty"`
+	Button             string   `json:"button,omitempty"`
+	Action             string   `json:"action,omitempty"`
+	Key                string   `json:"key,omitempty"`
+	Text               string   `json:"text,omitempty"`
+	Modifiers          []string `json:"modifiers,omitempty"`
+	Error              string   `json:"error,omitempty"`
+	ServerProcessingUS *int64   `json:"server_processing_us,omitempty"`
 }
 
 func Decode(raw []byte) (Message, error) {

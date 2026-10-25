@@ -18,6 +18,7 @@ import (
 type fakePointer struct {
 	mu    sync.Mutex
 	calls int
+	delay time.Duration
 }
 
 func (f *fakePointer) Capability() string { return protocol.Pointer }
@@ -25,6 +26,7 @@ func (f *fakePointer) Handle(m protocol.Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
+	time.Sleep(f.delay)
 	return m.ValidatePointer()
 }
 
@@ -60,7 +62,7 @@ func TestSecureLifecycle(t *testing.T) {
 		t.Fatal(e)
 	}
 	token := pairing.Secret()
-	fake := &fakePointer{}
+	fake := &fakePointer{delay: 15 * time.Millisecond}
 	n := &Node{Trust: trust, Pairing: pairing, Plugins: plugins.Registry{protocol.Pointer: fake}}
 	s := httptest.NewUnstartedServer(n.Handler())
 	s.TLS = n.TLS(serverCert)
@@ -91,6 +93,12 @@ func TestSecureLifecycle(t *testing.T) {
 	var reply protocol.Message
 	if e = conn.ReadJSON(&reply); e != nil || reply.Type != "ack" {
 		t.Fatalf("pointer: %v %v", reply, e)
+	}
+	if reply.ServerProcessingUS == nil || *reply.ServerProcessingUS < 0 {
+		t.Fatal("input acknowledgement must include nonnegative server processing time")
+	}
+	if *reply.ServerProcessingUS < fake.delay.Microseconds() {
+		t.Fatal("processing measurement excluded backend execution")
 	}
 	conn.Close()
 	fake.mu.Lock()
@@ -170,7 +178,8 @@ func TestKeyNegotiationAndDispatch(t *testing.T) {
 		t.Fatalf("unnegotiated key accepted: %v %v", reply, err)
 	}
 }
-func TestPairingExpiryAndConcurrency(t *testing.T) {	expired, _ := NewPairing(-time.Second)
+func TestPairingExpiryAndConcurrency(t *testing.T) {
+	expired, _ := NewPairing(-time.Second)
 	if expired.authorize(expired.Secret(), func() error { return nil }) == nil {
 		t.Fatal("expired secret accepted")
 	}

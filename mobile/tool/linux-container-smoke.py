@@ -5,7 +5,8 @@ import socket
 import subprocess
 import time
 
-binary = Path('/work/mobile/build/linux/x64/release/bundle/linkpad_controller')
+binary = Path(os.environ.get('LINKPAD_DESKTOP_SMOKE_BINARY',
+                            '/work/mobile/build/linux/x64/release/bundle/linkpad_controller'))
 log_path = Path('/results/desktop-startup.log')
 
 def listening():

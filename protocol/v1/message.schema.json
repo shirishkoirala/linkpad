@@ -58,6 +58,11 @@
     },
     "error": {
       "type": "string"
+    },
+    "server_processing_us": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional input ACK timing: lock wait and native input execution in microseconds."
     }
   },
   "allOf": [

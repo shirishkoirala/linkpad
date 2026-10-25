@@ -1,5 +1,7 @@
 # Linkpad desktop app
 
+For Mac DMG and Linux Debian installers, see [PACKAGING.md](PACKAGING.md).
+
 The Flutter project in `mobile/` now has desktop server screens for macOS and
 Linux. Android and iOS continue to open the mobile controller. The desktop app
 bundles the existing Go server; users do not need Go or a terminal to run a built

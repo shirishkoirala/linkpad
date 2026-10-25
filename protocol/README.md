@@ -11,6 +11,14 @@ UTF-8 JSON text frames, maximum 4096 bytes on the Go receiver. Each message has 
 5. `{"version":1,"type":"key","key":"up"}` presses and releases one arrow key (`up`, `down`, `left` or `right`); it carries no movement or button. Negotiated as `key.v1`, itself gated by the same pointer permission as the cursor.
 6. A subsequent `hello` is a keepalive, returning `ack`. Go allows 90 seconds between application messages. Android sends a heartbeat every 30 seconds while foregrounded. Handshake deadline 10 seconds, writes 5 seconds. Go sleeps 10 ms after a pointer acknowledgement per connection; this is basic pacing, not a global abuse quota. Android allows one pointer packet awaiting acknowledgement and throttles motion to 25 Hz, dropping intermediate movement; click while pending is also dropped.
 
-One request/ack flow at a time is recommended. No request IDs, retries or exactly-once delivery guarantees yet. WebSocket preserves frame order within each session. Reconnect uses the same private identity and verifies the same pin; all connections renegotiate capabilities. Pairing grants the peer all locally enabled capabilities for this slice; there are no per-device permission prompts yet. Both Go peers can listen or initiate a connection, although the controller-to-receiver pointer session is directional.
+The mobile controller permits up to four plain movement requests in flight; other input waits for acknowledgement barriers. ACKs are matched in WebSocket order. No request IDs, retries or exactly-once delivery guarantees yet. WebSocket preserves frame order within each session. Reconnect uses the same private identity and verifies the same pin; all connections renegotiate capabilities. Pairing grants the peer all locally enabled capabilities for this slice; there are no per-device permission prompts yet. Both Go peers can listen or initiate a connection, although the controller-to-receiver pointer session is directional.
 
 `v1/message.schema.json` documents the wire shape. Runtime tests exercise both parsing and real TLS/WebSocket sessions; JSON Schema itself is not loaded at runtime. Future plugin families require a new dispatcher and schema extension.
+
+Input ACKs may include `server_processing_us`, a nonnegative integer measuring
+management-lock wait and native input execution. It excludes socket reading,
+previous throttle sleeps, and ACK transmission. For example:
+`{"version":1,"type":"ack","server_processing_us":1200}`.
+Older peers may omit or ignore this optional extension. The client subtracts
+this value only from the same ACK's round trip and labels the remainder as
+network plus queues, not a network-only ping.

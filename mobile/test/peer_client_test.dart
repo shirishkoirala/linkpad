@@ -99,6 +99,7 @@ void main() {
     });
     peer = PeerClient(
       timing: const PeerTiming(
+        maxMotionInFlight: 1,
         responseTimeout: Duration(milliseconds: 500),
         inputPauseAfter: Duration(milliseconds: 150),
         retryBase: Duration(milliseconds: 40),
@@ -459,6 +460,7 @@ void main() {
       peer.dispose();
       peer = PeerClient(
         timing: const PeerTiming(
+          maxMotionInFlight: 1,
           frameInterval: Duration(milliseconds: 400),
           inputMaxAge: Duration(seconds: 3),
           inputPauseAfter: Duration(seconds: 3),
@@ -596,7 +598,7 @@ void main() {
     'a 280ms reply keeps input active, expires old input, and preserves fresh motion',
     () async {
       peer.dispose();
-      peer = PeerClient();
+      peer = PeerClient(timing: const PeerTiming(maxMotionInFlight: 1));
       await peer.connect(
         'wss://127.0.0.1:${server.port}/ws',
         fingerprint,
@@ -639,6 +641,223 @@ void main() {
         reason: 'The expired motion and click must not replay.',
       );
       expect(peer.reconnectCount, 0);
+    },
+  );
+
+  test(
+    'movement window is bounded and clicks remain acknowledgement barriers',
+    () async {
+      peer.dispose();
+      peer = PeerClient();
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      acknowledge = false;
+      for (var i = 0; i < 4; i++) {
+        peer.move(i + 1, 0);
+        await waitFor(peer, () => received.length == i + 2);
+      }
+      peer.move(5, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 35));
+      expect(
+        received.length,
+        5,
+        reason: 'At most four movements may be outstanding.',
+      );
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 6);
+      expect(received.last['dx'], 5);
+      peer.click('left');
+      peer.move(6, 0);
+      for (var i = 0; i < 3; i++) {
+        sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(
+        received.length,
+        6,
+        reason: 'The click waits for all movement replies.',
+      );
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 7);
+      expect(received.last['button'], 'left');
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+      expect(
+        received.length,
+        7,
+        reason: 'Movement cannot pass a pending click.',
+      );
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 8);
+      expect(received.last['dx'], 6);
+      acknowledge = true;
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+    },
+  );
+
+  test('a stalled movement window drains before fresh input resumes', () async {
+    peer.dispose();
+    peer = PeerClient(
+      timing: const PeerTiming(inputPauseAfter: Duration(milliseconds: 120)),
+    );
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.ready);
+    acknowledge = false;
+    for (var i = 0; i < 4; i++) {
+      peer.move(1, 0);
+      await waitFor(peer, () => received.length == i + 2);
+    }
+    peer.move(99, 99);
+    await waitFor(peer, () => peer.waitingForResponse);
+    for (var i = 0; i < 3; i++) {
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(peer.ready, isFalse);
+    }
+    acknowledge = true;
+    sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+    await waitFor(peer, () => peer.ready);
+    expect(
+      received.length,
+      5,
+      reason: 'Buffered movement must not replay after a stall.',
+    );
+    peer.move(2, 3);
+    await waitFor(peer, () => received.length == 6);
+    expect(received.last['dx'], 2);
+    expect(sockets.length, 1);
+  });
+
+  test('pause budget adapts to a measured slow round trip', () async {
+    peer.dispose();
+    peer = PeerClient();
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.ready);
+    acknowledge = false;
+    peer.click('left');
+    await waitFor(peer, () => received.length == 2);
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+    await waitFor(peer, () => peer.roundTripTime != null);
+    peer.click('right');
+    await waitFor(peer, () => received.length == 3);
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    expect(
+      peer.ready,
+      isTrue,
+      reason: 'Known latency allows more than the baseline 500ms.',
+    );
+    await waitFor(peer, () => peer.waitingForResponse);
+    expect(sockets.length, 1);
+    acknowledge = true;
+    sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+    await waitFor(peer, () => peer.ready);
+  });
+
+  test(
+    'later movement sends cannot postpone the oldest response timeout',
+    () async {
+      peer.dispose();
+      peer = PeerClient(
+        timing: const PeerTiming(
+          inputPauseAfter: Duration(milliseconds: 180),
+          responseTimeout: Duration(milliseconds: 350),
+          retryBase: Duration(milliseconds: 20),
+        ),
+      );
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      acknowledge = false;
+      final elapsed = Stopwatch()..start();
+      for (var i = 0; i < 3; i++) {
+        peer.move(1, 0);
+        await waitFor(peer, () => received.length == i + 2);
+        await Future<void>.delayed(const Duration(milliseconds: 55));
+      }
+      await waitFor(peer, () => peer.waitingForResponse);
+      expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 280)));
+      await waitFor(peer, () => peer.reconnectCount == 1);
+      expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 450)));
+      await waitFor(peer, () => peer.ready && sockets.length == 2);
+      expect(
+        received.where((message) => message['type'] == 'pointer').length,
+        3,
+      );
+    },
+  );
+
+  test(
+    'diagnostics separate server processing and reset on disconnect',
+    () async {
+      peer.dispose();
+      peer = PeerClient();
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      expect(peer.serverProcessingTime, isNull);
+      expect(peer.connectionDetails, contains('Desktop timing unavailable'));
+      acknowledge = false;
+      peer.click('left');
+      await waitFor(peer, () => received.length == 2);
+      await Future<void>.delayed(const Duration(milliseconds: 280));
+      sockets.last.add(
+        jsonEncode({
+          'version': 1,
+          'type': 'ack',
+          'server_processing_us': 20000,
+        }),
+      );
+      await waitFor(peer, () => peer.serverProcessingTime != null);
+      expect(peer.serverProcessingTime, const Duration(milliseconds: 20));
+      expect(
+        peer.remainingResponseDelay,
+        greaterThanOrEqualTo(const Duration(milliseconds: 260)),
+      );
+      expect(peer.connectionDetails, contains('Slow replies (≥250 ms): 1 / 1'));
+      expect(peer.connectionDetails, contains('20.0 ms (smoothed)'));
+      expect(peer.connectionDetails, contains('network + queues'));
+      for (final invalid in [-1, 'wrong', 1.5, 999999999]) {
+        peer.click('right');
+        final count = received.length;
+        await waitFor(peer, () => received.length > count);
+        sockets.last.add(
+          jsonEncode({
+            'version': 1,
+            'type': 'ack',
+            'server_processing_us': invalid,
+          }),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(peer.ready, isTrue);
+        expect(peer.serverProcessingTime, const Duration(milliseconds: 20));
+      }
+      peer.disconnect();
+      expect(peer.serverProcessingTime, isNull);
+      expect(peer.remainingResponseDelay, isNull);
+      expect(peer.connectionDetails, contains('Slow replies (≥250 ms): 0 / 0'));
     },
   );
 

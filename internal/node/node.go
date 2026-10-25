@@ -187,6 +187,7 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 			reject(err.Error())
 			return
 		}
+		processingStarted := time.Now()
 		n.management.Lock()
 		if n.Trust.Contains(id) {
 			err = n.input(conn, capability, m)
@@ -198,7 +199,8 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 			reject(err.Error())
 			return
 		}
-		if err = send(protocol.Message{Version: 1, Type: "ack"}); err != nil {
+		processingUS := time.Since(processingStarted).Microseconds()
+		if err = send(protocol.Message{Version: 1, Type: "ack", ServerProcessingUS: &processingUS}); err != nil {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

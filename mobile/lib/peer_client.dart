@@ -43,6 +43,7 @@ class PeerTiming {
     this.responseTimeout = const Duration(seconds: 5),
     this.inputMaxAge = const Duration(milliseconds: 150),
     this.inputPauseAfter = const Duration(milliseconds: 500),
+    this.maxMotionInFlight = 4,
     this.frameInterval = const Duration(milliseconds: 16),
     this.heartbeat = const Duration(seconds: 15),
     this.retryBase = const Duration(seconds: 1),
@@ -50,6 +51,7 @@ class PeerTiming {
   });
   final Duration connectTimeout, responseTimeout, inputMaxAge, frameInterval;
   final Duration inputPauseAfter;
+  final int maxMotionInFlight;
   final Duration heartbeat, retryBase, retryMax;
 
   Duration retryDelay(int attempt) => Duration(
@@ -84,15 +86,18 @@ class PeerClient extends ChangeNotifier {
   String? _pin;
   void Function()? _onPaired;
   bool _desired = false, _foreground = true, _canRetry = false;
-  bool _hadConnected = false, _pointer = false, _pending = false;
+  bool _hadConnected = false, _pointer = false;
+  final _outstanding = Queue<({Duration sent, bool motion})>();
+  bool get _pending => _outstanding.isNotEmpty;
   bool _scroll = false, _keys = false;
   bool _keyboard = false;
   bool _drag = false, _dragging = false, _dragSent = false;
   bool _releaseDragPending = false, _dragKeepalive = false;
   Timer? _dragHeartbeat;
   bool _stalled = false, _disposed = false;
-  Duration _pendingSince = Duration.zero;
   Duration? _lastSentAt, _roundTripTime, _latencyNotifiedAt;
+  Duration? _peakRoundTripTime, _serverProcessingTime, _remainingResponseDelay;
+  int _responseCount = 0, _slowResponseCount = 0, _inputPauseCount = 0;
   String _message = '';
   String? _lastConnectionIssue;
   int _reconnectCount = 0;
@@ -104,6 +109,8 @@ class PeerClient extends ChangeNotifier {
 
   /// Smoothed acknowledgement round trip, including desktop processing time.
   Duration? get roundTripTime => _roundTripTime;
+  Duration? get serverProcessingTime => _serverProcessingTime;
+  Duration? get remainingResponseDelay => _remainingResponseDelay;
   String get connectionSummary =>
       connected && !_stalled && _roundTripTime != null
       ? '$status · ${_roundTripTime!.inMilliseconds} ms'
@@ -113,6 +120,16 @@ class PeerClient extends ChangeNotifier {
   String get connectionDetails => [
     connectionSummary,
     'Response time includes the network round trip and desktop processing.',
+    if (_peakRoundTripTime != null)
+      'Peak response: ${_peakRoundTripTime!.inMilliseconds} ms',
+    'Slow replies (≥250 ms): $_slowResponseCount / $_responseCount',
+    'Input pauses on this connection: $_inputPauseCount',
+    if (_serverProcessingTime != null) ...[
+      'Desktop input processing: ${(_serverProcessingTime!.inMicroseconds / 1000).toStringAsFixed(1)} ms (smoothed)',
+      'Other response delay: ${(_remainingResponseDelay!.inMicroseconds / 1000).toStringAsFixed(1)} ms (smoothed; network + queues)',
+    ] else
+      'Desktop timing unavailable. Update the desktop server for processing diagnostics.',
+    'Outstanding replies: ${_outstanding.length}',
     'Reconnect attempts this session: $_reconnectCount',
     if (_lastConnectionIssue != null)
       'Last interruption: $_lastConnectionIssue',
@@ -337,7 +354,8 @@ class PeerClient extends ChangeNotifier {
         _deadline?.cancel();
         _lag?.cancel();
         final now = _clock.elapsed;
-        final sample = now - _pendingSince;
+        final sample = now - _outstanding.removeFirst().sent;
+        _recordResponse(sample, message['server_processing_us']);
         final previous = _roundTripTime;
         _roundTripTime = previous == null
             ? sample
@@ -350,9 +368,10 @@ class PeerClient extends ChangeNotifier {
         if (_stalled) {
           _input.clear();
         }
-        _pending = false;
         final wasStalled = _stalled;
-        _stalled = false;
+        // Drain every outstanding reply before resuming after a stall.
+        _stalled = wasStalled && _pending;
+        _armResponseTimers();
         // Keep high-rate acknowledgements off the widget rebuild path.
         if (wasStalled ||
             _latencyNotifiedAt == null ||
@@ -369,6 +388,31 @@ class PeerClient extends ChangeNotifier {
     } catch (_) {
       _fatal('Invalid desktop response. Update both apps before reconnecting.');
     }
+  }
+
+  void _recordResponse(Duration sample, dynamic processingUS) {
+    _responseCount++;
+    if (sample >= const Duration(milliseconds: 250)) _slowResponseCount++;
+    if (_peakRoundTripTime == null || sample > _peakRoundTripTime!) {
+      _peakRoundTripTime = sample;
+    }
+    // Optional metadata must never disrupt input. Subtract only timings from
+    // the same acknowledgement; the remainder also includes queueing delays.
+    if (processingUS is! int ||
+        processingUS < 0 ||
+        processingUS > sample.inMicroseconds) {
+      return;
+    }
+    Duration smooth(Duration? previous, int value) => Duration(
+      microseconds: previous == null
+          ? value
+          : (previous.inMicroseconds * 3 + value) ~/ 4,
+    );
+    _serverProcessingTime = smooth(_serverProcessingTime, processingUS);
+    _remainingResponseDelay = smooth(
+      _remainingResponseDelay,
+      sample.inMicroseconds - processingUS,
+    );
   }
 
   Future<void> _saveDesktop(int generation) async {
@@ -469,11 +513,22 @@ class PeerClient extends ChangeNotifier {
   bool get _hasDragWork =>
       _releaseDragPending || (_dragging && (!_dragSent || _dragKeepalive));
 
+  // Only plain movement may pass an outstanding movement. Every other action
+  // waits for the window to drain, retaining the existing input barriers.
+  bool get _canPipelineMotion =>
+      !_dragging &&
+      !_dragSent &&
+      !_hasDragWork &&
+      _commands.isEmpty &&
+      _outstanding.length < timing.maxMotionInFlight &&
+      _outstanding.every((entry) => entry.motion) &&
+      _input.hasMotionReady(_clock.elapsed);
+
   void _scheduleInput() {
     _expireCommands();
     if (!connected ||
         _stalled ||
-        _pending ||
+        (_pending && !_canPipelineMotion) ||
         _frame != null ||
         (!_hasDragWork &&
             _commands.isEmpty &&
@@ -487,7 +542,7 @@ class PeerClient extends ChangeNotifier {
         : timing.frameInterval - (_clock.elapsed - _lastSentAt!);
     _frame = Timer(remaining.isNegative ? Duration.zero : remaining, () {
       _frame = null;
-      if (!connected || _stalled || _pending) return;
+      if (!connected || _stalled || (_pending && !_canPipelineMotion)) return;
       _expireCommands();
       if (_releaseDragPending) {
         // Flush the last fresh movement before releasing, never replay stale input.
@@ -523,6 +578,7 @@ class PeerClient extends ChangeNotifier {
             input.isScroll
                 ? scrollMessage(input.dx, input.dy)
                 : pointer(input.dx, input.dy, input.button),
+            motion: !input.isScroll && input.button == null,
           );
         }
       } else if (_dragging && _dragKeepalive) {
@@ -532,28 +588,58 @@ class PeerClient extends ChangeNotifier {
     });
   }
 
-  void _send(String message) {
-    if (!connected || _pending || _socket == null) return;
-    final generation = _generation;
-    _pending = true;
-    _pendingSince = _clock.elapsed;
-    _lastSentAt = _pendingSince;
-    _deadline?.cancel();
-    _lag?.cancel();
+  void _send(String message, {bool motion = false}) {
+    if (!connected ||
+        _socket == null ||
+        (_pending &&
+            (!motion ||
+                _outstanding.length >= timing.maxMotionInFlight ||
+                !_outstanding.every((entry) => entry.motion)))) {
+      return;
+    }
+    final sent = _clock.elapsed;
+    _outstanding.add((sent: sent, motion: motion));
+    _lastSentAt = sent;
     try {
       _socket!.add(message);
     } catch (_) {
       _networkFailure('Connection lost.');
       return;
     }
-    _lag = Timer(timing.inputPauseAfter, () {
+    _armResponseTimers();
+    _scheduleInput();
+  }
+
+  Duration get _pauseBudget {
+    final measured = (_roundTripTime?.inMicroseconds ?? 0) * 3;
+    final ceiling = timing.inputPauseAfter > const Duration(seconds: 1)
+        ? timing.inputPauseAfter.inMicroseconds
+        : const Duration(seconds: 1).inMicroseconds;
+    return Duration(
+      microseconds: measured.clamp(
+        timing.inputPauseAfter.inMicroseconds,
+        ceiling,
+      ),
+    );
+  }
+
+  void _armResponseTimers() {
+    _deadline?.cancel();
+    _lag?.cancel();
+    if (!_pending) return;
+    final generation = _generation;
+    final age = _clock.elapsed - _outstanding.first.sent;
+    Duration remaining(Duration limit) =>
+        age >= limit ? Duration.zero : limit - age;
+    _lag = Timer(remaining(_pauseBudget), () {
       if (generation != _generation || !_pending) return;
       _input.clear();
+      if (!_stalled) _inputPauseCount++;
       _stalled = true;
       cancelDrag();
       _notify();
     });
-    _deadline = Timer(timing.responseTimeout, () {
+    _deadline = Timer(remaining(timing.responseTimeout), () {
       if (generation == _generation) {
         _networkFailure('Desktop stopped responding.');
       }
@@ -621,8 +707,11 @@ class PeerClient extends ChangeNotifier {
     _http?.close(force: true);
     _socket = null;
     _http = null;
-    _pending = _stalled = _pointer = false;
+    _outstanding.clear();
+    _stalled = _pointer = false;
     _lastSentAt = _roundTripTime = _latencyNotifiedAt = null;
+    _peakRoundTripTime = _serverProcessingTime = _remainingResponseDelay = null;
+    _responseCount = _slowResponseCount = _inputPauseCount = 0;
     _scroll = _keys = false;
     _keyboard = false;
     _dragHeartbeat?.cancel();

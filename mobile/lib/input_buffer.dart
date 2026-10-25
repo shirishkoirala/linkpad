@@ -79,6 +79,9 @@ class InputBuffer {
             _queue.first.dy.abs() >= 1);
   }
 
+  bool hasMotionReady(Duration now) =>
+      hasReady(now) && _queue.first.button == null && !_queue.first.isScroll;
+
   PointerInput? take(Duration now) {
     if (!hasReady(now)) return null;
     final input = _queue.first;
