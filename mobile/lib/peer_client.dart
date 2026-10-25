@@ -42,12 +42,14 @@ class PeerTiming {
     this.connectTimeout = const Duration(seconds: 10),
     this.responseTimeout = const Duration(seconds: 5),
     this.inputMaxAge = const Duration(milliseconds: 150),
+    this.inputPauseAfter = const Duration(milliseconds: 500),
     this.frameInterval = const Duration(milliseconds: 16),
     this.heartbeat = const Duration(seconds: 15),
     this.retryBase = const Duration(seconds: 1),
     this.retryMax = const Duration(seconds: 15),
   });
   final Duration connectTimeout, responseTimeout, inputMaxAge, frameInterval;
+  final Duration inputPauseAfter;
   final Duration heartbeat, retryBase, retryMax;
 
   Duration retryDelay(int attempt) => Duration(
@@ -98,6 +100,7 @@ class PeerClient extends ChangeNotifier {
   PeerState state = PeerState.disconnected;
 
   bool get connected => state == PeerState.connected;
+  bool get waitingForResponse => connected && _stalled;
 
   /// Smoothed acknowledgement round trip, including desktop processing time.
   Duration? get roundTripTime => _roundTripTime;
@@ -342,7 +345,9 @@ class PeerClient extends ChangeNotifier {
                 microseconds:
                     (previous.inMicroseconds * 3 + sample.inMicroseconds) ~/ 4,
               );
-        if (_clock.elapsed - _pendingSince >= timing.inputMaxAge) {
+        // A slow reply does not make newer queued input stale. The buffer
+        // expires each event by its own age; a real stall discards everything.
+        if (_stalled) {
           _input.clear();
         }
         _pending = false;
@@ -541,7 +546,7 @@ class PeerClient extends ChangeNotifier {
       _networkFailure('Connection lost.');
       return;
     }
-    _lag = Timer(timing.inputMaxAge, () {
+    _lag = Timer(timing.inputPauseAfter, () {
       if (generation != _generation || !_pending) return;
       _input.clear();
       _stalled = true;

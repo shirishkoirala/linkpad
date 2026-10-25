@@ -6,3 +6,7 @@
 /android/local.properties
 .DS_Store
 /.serena/
+
+# Local pairing QR and Flutter diagnostic screenshots.
+/qr.png
+/mobile/flutter_*.png

@@ -13,6 +13,9 @@ class FakePeer extends PeerClient {
   final typed = <String>[];
   final keys = <({String key, Set<String> modifiers})>[];
   bool available = true;
+  bool responsePaused = false;
+  @override
+  bool get waitingForResponse => connected && responsePaused;
   final motionEvents = <Offset>[];
 
   @override
@@ -50,12 +53,52 @@ class FakePeer extends PeerClient {
 
   void resume() {
     available = true;
+    responsePaused = false;
     state = PeerState.connected;
     notifyListeners();
   }
 }
 
 void main() {
+  testWidgets(
+    'a slow response shows a network pause instead of a permission error',
+    (tester) async {
+      final peer = FakePeer();
+      final settings = CursorSettings();
+      addTearDown(peer.dispose);
+      addTearDown(settings.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: linkpadTheme(Brightness.light),
+          home: AnimatedBuilder(
+            animation: peer,
+            builder: (_, _) => ControlDeck(peer: peer, settings: settings),
+          ),
+        ),
+      );
+      peer.available = false;
+      peer.responsePaused = true;
+      peer.notifyListeners();
+      await tester.pump();
+      expect(
+        find.text('Connection is slow. Waiting for your computer to respond…'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('desktop server permissions'), findsNothing);
+      peer.resume();
+      await tester.pump();
+      expect(
+        find.textContaining('Waiting for your computer to respond'),
+        findsNothing,
+      );
+      peer.available = false;
+      peer.notifyListeners();
+      await tester.pump();
+      expect(find.textContaining('desktop server permissions'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'held contact survives the reconnect warning appearing and disappearing',
     (tester) async {

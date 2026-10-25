@@ -6,11 +6,17 @@ click boundaries and the drag/keyboard lifecycle retain their existing ordering.
 Queued input still expires after 150 ms by default. Stalled connections pause
 input, and disconnect/background transitions discard queued actions.
 
-A missing acknowledgement pauses input at 150 ms, but the controller waits up
+A missing acknowledgement pauses input at 500 ms, but the controller waits up
 to five seconds before tearing down TLS and reconnecting. This allows a temporary
 Wi-Fi or desktop scheduling stall to recover on the same connection. The desktop
 drag lease still expires independently after two seconds; the longer transport
 timeout does not extend held input. A delayed reply never replays expired actions.
+
+Response tolerance and event freshness are separate limits. A roughly 284 ms
+round trip must not repeatedly disable the touchpad just because events older
+than 150 ms are stale. Below the pause threshold, a late acknowledgement keeps
+fresh queued input and expires older events by their own timestamps. At or beyond
+the pause threshold, queued input is discarded and the active drag is cancelled.
 
 The 16 ms send interval is measured from the previous transmission, not from
 its acknowledgement. The first ready input can send immediately. If a response

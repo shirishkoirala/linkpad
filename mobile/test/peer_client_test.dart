@@ -100,6 +100,7 @@ void main() {
     peer = PeerClient(
       timing: const PeerTiming(
         responseTimeout: Duration(milliseconds: 500),
+        inputPauseAfter: Duration(milliseconds: 150),
         retryBase: Duration(milliseconds: 40),
         retryMax: Duration(milliseconds: 100),
       ),
@@ -460,6 +461,7 @@ void main() {
         timing: const PeerTiming(
           frameInterval: Duration(milliseconds: 400),
           inputMaxAge: Duration(seconds: 3),
+          inputPauseAfter: Duration(seconds: 3),
           responseTimeout: Duration(seconds: 5),
         ),
       );
@@ -587,6 +589,56 @@ void main() {
       expect(received.last['dx'], 3);
       expect(received.last['dy'], 4);
       expect(peer.lastConnectionIssue, isNull);
+    },
+  );
+
+  test(
+    'a 280ms reply keeps input active, expires old input, and preserves fresh motion',
+    () async {
+      peer.dispose();
+      peer = PeerClient();
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.ready);
+      acknowledge = false;
+      peer.move(1, 0);
+      await waitFor(peer, () => received.length == 2);
+      peer.move(100, 100);
+      peer.click('right');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(
+        peer.ready,
+        isTrue,
+        reason: 'Response tolerance must be separate from event freshness.',
+      );
+      // These events are fresh when the held acknowledgement is released.
+      peer.move(3, 2);
+      peer.move(4, 1);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(peer.ready, isTrue);
+      expect(sockets.length, 1);
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 3);
+      expect(received.last['dx'], 7);
+      expect(received.last['dy'], 3);
+      expect(received.last['button'], isNull);
+      expect(
+        peer.roundTripTime,
+        greaterThanOrEqualTo(const Duration(milliseconds: 250)),
+      );
+      acknowledge = true;
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(
+        received.length,
+        3,
+        reason: 'The expired motion and click must not replay.',
+      );
+      expect(peer.reconnectCount, 0);
     },
   );
 

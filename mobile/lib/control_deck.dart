@@ -210,7 +210,9 @@ class _ControlDeckState extends State<ControlDeck> {
                               ),
                               child: Text(
                                 peer.storageWarning ??
-                                    (peer.connected
+                                    (peer.waitingForResponse
+                                        ? 'Connection is slow. Waiting for your computer to respond…'
+                                        : peer.connected
                                         ? 'Desktop input unavailable. Check the desktop server permissions.'
                                         : 'Controls paused while we reconnect.'),
                                 style: const TextStyle(fontSize: 13),
