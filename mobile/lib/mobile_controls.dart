@@ -24,6 +24,45 @@ class MobileControlScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final inputReady = mode == MobileControlMode.remote
+        ? peer.canKeyboard || peer.canKey
+        : mode == MobileControlMode.keyboard
+        ? peer.canKeyboard
+        : peer.ready;
+    final subtitle = switch (peer.state) {
+      PeerState.connected =>
+        peer.waitingForResponse
+            ? 'Connection slow · Input paused'
+            : inputReady
+            ? 'Connected · Ready to control'
+            : 'Input unavailable · Check desktop permissions',
+      PeerState.reconnecting => 'Reconnecting… · Controls paused',
+      PeerState.connecting => 'Connecting…',
+      PeerState.disconnected => 'Disconnected · Select a computer',
+      PeerState.suspended => 'Paused while app is inactive',
+      PeerState.failed => peer.status,
+    };
+    final latency = peer.roundTripTime?.inMilliseconds;
+    final quality = !peer.connected
+        ? 'Disconnected'
+        : peer.waitingForResponse
+        ? 'Connection slow'
+        : latency == null
+        ? 'Measuring connection'
+        : latency < 100
+        ? 'Excellent'
+        : latency < 250
+        ? 'Good'
+        : 'Weak';
+    final signal = !peer.connected || peer.waitingForResponse
+        ? Icons.wifi_off
+        : latency == null
+        ? Icons.wifi_find
+        : latency < 100
+        ? Icons.wifi
+        : latency < 250
+        ? Icons.wifi_2_bar
+        : Icons.wifi_1_bar;
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -48,22 +87,27 @@ class MobileControlScaffold extends StatelessWidget {
                           style: LinkpadStyle.cardTitle,
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          peer.connectionSummary,
-                          maxLines: 2,
-                          style: LinkpadStyle.caption.copyWith(
-                            color: colors.onSurfaceVariant,
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            subtitle,
+                            maxLines: 2,
+                            style: LinkpadStyle.caption.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                   Tooltip(
-                    message: peer.connectionDetails,
+                    message:
+                        'Connection quality: $quality\n${peer.connectionDetails}',
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Icon(
-                        peer.connected ? Icons.wifi : Icons.wifi_off,
+                        signal,
+                        semanticLabel: 'Connection quality: $quality',
                         size: 20,
                         color: colors.primary,
                       ),
@@ -170,10 +214,8 @@ class MobileControlNotice extends StatelessWidget {
         : peer.ready;
     final message =
         peer.storageWarning ??
-        (peer.waitingForResponse
-            ? 'Connection is slow. Waiting for your computer to respond…'
-            : !peer.connected
-            ? 'Controls paused while we reconnect.'
+        (!peer.connected || peer.waitingForResponse
+            ? null
             : !inputReady
             ? 'Desktop input unavailable. Check the desktop server permissions.'
             : keyboardRequired && !peer.supportsKeyboard

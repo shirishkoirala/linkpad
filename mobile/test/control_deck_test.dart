@@ -80,10 +80,7 @@ void main() {
       peer.responsePaused = true;
       peer.notifyListeners();
       await tester.pump();
-      expect(
-        find.text('Connection is slow. Waiting for your computer to respond…'),
-        findsOneWidget,
-      );
+      expect(find.text('Connection slow · Input paused'), findsOneWidget);
       expect(find.textContaining('desktop server permissions'), findsNothing);
       peer.resume();
       await tester.pump();
