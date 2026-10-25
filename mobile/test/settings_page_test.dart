@@ -32,7 +32,7 @@ void main() {
         home: ControlDeck(peer: peer, settings: settings),
       ),
     );
-    await tester.tap(find.text('Settings'));
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsPage), findsOneWidget);
     final slider = find.byType(Slider);

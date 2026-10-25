@@ -110,7 +110,7 @@ void main() {
       await tester.tap(find.text('Remote'));
       await tester.pumpAndSettle();
       expect(settings.lastControlMode, MobileControlMode.remote);
-      await tester.tap(find.text('Computers'));
+      await tester.tap(find.byTooltip('Computers'));
       await tester.pumpAndSettle();
       expect(settings.lastControlMode, MobileControlMode.remote);
       peer.resume();

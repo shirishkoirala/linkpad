@@ -84,7 +84,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(peer.attempts, [a]);
     expect(find.text('Linux PC'), findsOneWidget);
-    await tester.tap(find.text('Computers'));
+    await tester.tap(find.byTooltip('Computers'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(connect(b));
     await tester.pumpAndSettle();

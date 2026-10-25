@@ -63,6 +63,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     final navigation = tester.getRect(find.text('Remote'));
+    expect(find.text('Computers'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
+    expect(find.byTooltip('Computers'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
     final touchpadOrigin = tester.getTopLeft(find.byType(RelativeTouchpad));
     expect(
       tester

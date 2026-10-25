@@ -11,8 +11,6 @@ class MobileControlScaffold extends StatelessWidget {
     required this.peer,
     required this.mode,
     required this.onModeChanged,
-    required this.onBack,
-    required this.backTooltip,
     required this.onComputers,
     required this.onSettings,
     required this.bodyBuilder,
@@ -20,8 +18,7 @@ class MobileControlScaffold extends StatelessWidget {
   final PeerClient peer;
   final MobileControlMode mode;
   final ValueChanged<MobileControlMode> onModeChanged;
-  final VoidCallback onBack, onComputers, onSettings;
-  final String backTooltip;
+  final VoidCallback onComputers, onSettings;
   final Widget Function(BuildContext, BoxConstraints) bodyBuilder;
 
   @override
@@ -36,8 +33,8 @@ class MobileControlScaffold extends StatelessWidget {
               Row(
                 children: [
                   IconButton(
-                    onPressed: onBack,
-                    tooltip: backTooltip,
+                    onPressed: onComputers,
+                    tooltip: 'Computers',
                     icon: const Icon(Icons.chevron_left),
                   ),
                   Expanded(
@@ -77,6 +74,11 @@ class MobileControlScaffold extends StatelessWidget {
                     tooltip: 'Gestures',
                     icon: const Icon(Icons.help_outline),
                   ),
+                  IconButton(
+                    onPressed: onSettings,
+                    tooltip: 'Settings',
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -106,20 +108,6 @@ class MobileControlScaffold extends StatelessWidget {
                     'Keyboard',
                     mode == MobileControlMode.keyboard,
                     () => onModeChanged(MobileControlMode.keyboard),
-                  ),
-                  _destination(
-                    context,
-                    Icons.desktop_windows_outlined,
-                    'Computers',
-                    false,
-                    onComputers,
-                  ),
-                  _destination(
-                    context,
-                    Icons.settings_outlined,
-                    'Settings',
-                    false,
-                    onSettings,
                   ),
                 ],
               ),

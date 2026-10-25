@@ -146,8 +146,6 @@ class _ControlDeckState extends State<ControlDeck> {
             ? MobileControlMode.keyboard
             : MobileControlMode.touchpad,
         onModeChanged: _selectMode,
-        onBack: peer.disconnect,
-        backTooltip: 'Disconnect and return to computers',
         onComputers: peer.disconnect,
         onSettings: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -157,7 +155,7 @@ class _ControlDeckState extends State<ControlDeck> {
         bodyBuilder: (context, constraints) {
           final height = math.max(
             constraints.maxHeight,
-          keyboard ? 600.0 : 360.0,
+            keyboard ? 600.0 : 360.0,
           );
           return SingleChildScrollView(
             physics: height > constraints.maxHeight
@@ -191,9 +189,7 @@ class _ControlDeckState extends State<ControlDeck> {
                           onClick: peer.click,
                           onScroll: peer.canScroll ? peer.scroll : null,
                           child: MobileControlSurface(
-                            child: TouchpadHint(
-                              ready: peer.ready,
-                            ),
+                            child: TouchpadHint(ready: peer.ready),
                           ),
                         ),
                       ),

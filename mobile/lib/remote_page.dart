@@ -70,8 +70,6 @@ class _RemotePageState extends State<RemotePage> {
         onModeChanged: (mode) {
           if (mode != MobileControlMode.remote) _switchMode(mode.name);
         },
-        onBack: () => _switchMode('touchpad'),
-        backTooltip: 'Back to touchpad',
         onComputers: () {
           peer.disconnect();
           Navigator.pop(context);
