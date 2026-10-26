@@ -5,6 +5,9 @@ import 'control_deck_test.dart' show FakePeer;
 
 class QualityPeer extends FakePeer {
   Duration? latency;
+  bool queueFull = false;
+  @override
+  bool get inputQueueFull => queueFull;
   void refresh() => notifyListeners();
   @override
   Duration? get roundTripTime => latency;
@@ -49,6 +52,12 @@ void main() {
           isTrue,
         );
       }
+      peer.queueFull = true;
+      peer.refresh();
+      await tester.pump();
+      expect(find.text('Sending queued keys… · Please wait'), findsOneWidget);
+      expect(find.byIcon(Icons.wifi_1_bar), findsOneWidget);
+      peer.queueFull = false;
       peer.responsePaused = true;
       peer.refresh();
       await tester.pump();
@@ -56,8 +65,8 @@ void main() {
       peer.pause();
       await tester.pump();
       expect(find.byIcon(Icons.wifi_off), findsOneWidget);
-    expect(find.text('Reconnecting… · Controls paused'), findsOneWidget);
-    expect(find.text('Controls paused while we reconnect.'), findsNothing);
+      expect(find.text('Reconnecting… · Controls paused'), findsOneWidget);
+      expect(find.text('Controls paused while we reconnect.'), findsNothing);
     },
   );
 }

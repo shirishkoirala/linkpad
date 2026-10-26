@@ -35,6 +35,20 @@ class _RemotePageState extends State<RemotePage> {
     'super': 'Win / Command',
   };
 
+  void _toggleSuper() => setState(() {
+    modifiers.contains('super')
+        ? modifiers.remove('super')
+        : modifiers.add('super');
+  });
+
+  void _tapSuper() {
+    if (modifiers.contains('super') || !peer.supportsStandaloneSuper) {
+      _toggleSuper();
+    } else {
+      peer.keyboardKey('super');
+    }
+  }
+
   void _send(String key, {Set<String> extra = const {}}) {
     final mods = {...modifiers, ...extra};
     bool sent;
@@ -156,11 +170,16 @@ class _RemotePageState extends State<RemotePage> {
             padding: const EdgeInsets.symmetric(horizontal: 3),
             child: FilledButton.tonal(
               onPressed: peer.canKeyboard
-                  ? () => setState(() {
-                      modifiers.contains(mod)
-                          ? modifiers.remove(mod)
-                          : modifiers.add(mod);
-                    })
+                  ? mod == 'super'
+                        ? _tapSuper
+                        : () => setState(() {
+                            modifiers.contains(mod)
+                                ? modifiers.remove(mod)
+                                : modifiers.add(mod);
+                          })
+                  : null,
+              onLongPress: peer.canKeyboard && mod == 'super'
+                  ? _toggleSuper
                   : null,
               style: FilledButton.styleFrom(
                 minimumSize: const Size(0, 48),

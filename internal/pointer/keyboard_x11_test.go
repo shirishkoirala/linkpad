@@ -43,10 +43,13 @@ func TestKeyboardX11Integration(t *testing.T) {
 	if err = nativeKeyboard("enter", "", nil); err != nil {
 		t.Fatal(err)
 	}
+	if err = nativeKeyboard("super", "", nil); err != nil {
+		t.Fatal(err)
+	}
 	deadline := time.Now().Add(2 * time.Second)
 	presses, releases := 0, 0
 	shifted, controlled := false, false
-	for time.Now().Before(deadline) && releases < 6 {
+	for time.Now().Before(deadline) && releases < 7 {
 		event, err := conn.PollForEvent()
 		if err != nil {
 			t.Fatal(err)
@@ -63,7 +66,7 @@ func TestKeyboardX11Integration(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	if presses != 6 || releases != 6 || !shifted || !controlled {
+	if presses != 7 || releases != 7 || !shifted || !controlled {
 		t.Fatalf("unbalanced keys or missing modifiers: presses=%d releases=%d shift=%v ctrl=%v", presses, releases, shifted, controlled)
 	}
 }

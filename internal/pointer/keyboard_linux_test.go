@@ -22,3 +22,13 @@ func TestKeyboardMapping(t *testing.T) {
 		t.Fatal("must reject the entire unmapped string before sending any events")
 	}
 }
+
+func TestStandaloneSuperMapping(t *testing.T) {
+	strokes, err := keyboardStrokes([]xproto.Keysym{0xffeb, 0}, 2, 133, "super", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(strokes) != 1 || strokes[0].code != 133 || len(strokes[0].mods) != 0 {
+		t.Fatalf("unexpected standalone Super strokes: %#v", strokes)
+	}
+}

@@ -47,3 +47,8 @@ func (Backend) Handle(m protocol.Message) error {
 	}
 	return native(m.DX, m.DY, m.Button)
 }
+
+// SuperKeyBackend advertises standalone Super/Command separately for old clients.
+type SuperKeyBackend struct{ KeyboardBackend }
+
+func (SuperKeyBackend) Capability() string { return protocol.SuperKey }

@@ -42,8 +42,6 @@ class PeerTiming {
     this.connectTimeout = const Duration(seconds: 10),
     this.responseTimeout = const Duration(seconds: 5),
     this.inputMaxAge = const Duration(milliseconds: 150),
-    // Typing waits for ordered acknowledgements; it must outlive normal jitter.
-    this.keyboardMaxAge = const Duration(seconds: 3),
     this.inputPauseAfter = const Duration(milliseconds: 500),
     this.maxMotionInFlight = 4,
     this.frameInterval = const Duration(milliseconds: 16),
@@ -53,7 +51,6 @@ class PeerTiming {
   });
   final Duration connectTimeout, responseTimeout, inputMaxAge, frameInterval;
   final Duration inputPauseAfter;
-  final Duration keyboardMaxAge;
   final int maxMotionInFlight;
   final Duration heartbeat, retryBase, retryMax;
 
@@ -76,7 +73,9 @@ class PeerClient extends ChangeNotifier {
   final ComputerStore computers;
   final bool _ownsComputers;
   final InputBuffer _input;
-  final _commands = Queue<({String message, Duration created})>();
+  final _commands = Queue<({String message, Duration? expiresAt})>();
+  static const _commandCapacity = 64;
+  bool get inputQueueFull => _commands.length >= _commandCapacity;
   final _clock = Stopwatch()..start();
   Future<SecurityContext>? _identityFuture;
   WebSocket? _socket;
@@ -94,6 +93,7 @@ class PeerClient extends ChangeNotifier {
   bool get _pending => _outstanding.isNotEmpty;
   bool _scroll = false, _keys = false;
   bool _keyboard = false;
+  bool _standaloneSuper = false;
   bool _drag = false, _dragging = false, _dragSent = false;
   bool _releaseDragPending = false, _dragKeepalive = false;
   Timer? _dragHeartbeat;
@@ -139,9 +139,11 @@ class PeerClient extends ChangeNotifier {
   ].join('\n');
   bool get ready => connected && _pointer && !_stalled;
   bool get canScroll => connected && _scroll && !_stalled;
-  bool get canKey => connected && _keys && !_stalled;
-  bool get canKeyboard => connected && _keyboard && !_stalled;
+  bool get canKey => connected && _keys && !_stalled && !inputQueueFull;
+  bool get canKeyboard =>
+      connected && _keyboard && !_stalled && !inputQueueFull;
   bool get supportsKeyboard => _keyboard;
+  bool get supportsStandaloneSuper => _standaloneSuper;
   bool get supportsDrag => _drag;
   bool get canDrag => ready && _drag;
   bool get dragging => _dragging;
@@ -339,6 +341,7 @@ class PeerClient extends ChangeNotifier {
         _scroll = capabilities.contains(scrollCapability);
         _keys = capabilities.contains(keyCapability);
         _keyboard = capabilities.contains(keyboardCapability);
+        _standaloneSuper = capabilities.contains(superKeyCapability);
         _drag = capabilities.contains(dragCapability);
         _hadConnected = true;
         _canRetry = true;
@@ -367,7 +370,7 @@ class PeerClient extends ChangeNotifier {
                     (previous.inMicroseconds * 3 + sample.inMicroseconds) ~/ 4,
               );
         // A slow reply does not make newer queued input stale. The buffer
-        // expires each event by its own age; a real stall discards everything.
+        // expires each motion by its own age; a real stall discards pointer work.
         if (_stalled) {
           _input.clear();
         }
@@ -494,23 +497,42 @@ class PeerClient extends ChangeNotifier {
   }
 
   bool keyboardKey(String key, {Set<String> modifiers = const {}}) {
-    if (!canKeyboard) return false;
+    if (!canKeyboard || (key == 'super' && !_standaloneSuper)) return false;
     return _queueCommand(keyboardMessage(key: key, modifiers: modifiers));
   }
 
   bool _queueCommand(String message) {
     _expireCommands();
-    if (_commands.length >= 32) return false;
-    _commands.add((message: message, created: _clock.elapsed));
+    if (inputQueueFull) return false;
+    // Seal earlier pointer work into the command stream. A focus-changing
+    // click must reach the desktop before text entered after that click.
+    final now = _clock.elapsed;
+    PointerInput? input;
+    // Held movement must stay on the drag path, including its release barrier.
+    while (!_dragging && !_dragSent && (input = _input.take(now)) != null) {
+      final event = input!;
+      _commands.add((
+        message: event.isScroll
+            ? scrollMessage(event.dx, event.dy)
+            : pointer(event.dx, event.dy, event.button),
+        // Motion remains disposable; a click is a reliable ordering barrier.
+        expiresAt: event.button == null
+            ? event.created + timing.inputMaxAge
+            : null,
+      ));
+    }
+    _commands.add((message: message, expiresAt: null));
+    if (inputQueueFull) _notify();
     _scheduleInput();
     return true;
   }
 
   void _expireCommands() {
-    while (_commands.isNotEmpty &&
-        _clock.elapsed - _commands.first.created >= timing.keyboardMaxAge) {
-      _commands.removeFirst();
-    }
+    final wasFull = inputQueueFull;
+    _commands.removeWhere(
+      (event) => event.expiresAt != null && _clock.elapsed >= event.expiresAt!,
+    );
+    if (wasFull && !inputQueueFull) _notify();
   }
 
   bool get _hasDragWork =>
@@ -567,7 +589,9 @@ class PeerClient extends ChangeNotifier {
         return;
       }
       if (_commands.isNotEmpty) {
+        final wasFull = inputQueueFull;
         _send(_commands.removeFirst().message);
+        if (wasFull && !inputQueueFull) _notify();
         return;
       }
       if (!ready) return;
@@ -717,6 +741,7 @@ class PeerClient extends ChangeNotifier {
     _responseCount = _slowResponseCount = _inputPauseCount = 0;
     _scroll = _keys = false;
     _keyboard = false;
+    _standaloneSuper = false;
     _dragHeartbeat?.cancel();
     _dragHeartbeat = null;
     _drag = _dragging = _dragSent = _releaseDragPending = _dragKeepalive =

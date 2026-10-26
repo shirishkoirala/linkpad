@@ -5,6 +5,7 @@ const pointerCapability = 'pointer.v1';
 const scrollCapability = 'scroll.v1';
 const keyCapability = 'key.v1';
 const keyboardCapability = 'keyboard.v1';
+const superKeyCapability = 'keyboard.super.v1';
 
 List<String> readyCapabilities(Map<String, dynamic> message) {
   // The Go desktop omits this field when no capabilities are available.
@@ -25,6 +26,7 @@ String hello(String token) => jsonEncode({
     scrollCapability,
     keyCapability,
     keyboardCapability,
+    superKeyCapability,
     dragCapability,
   ],
 });

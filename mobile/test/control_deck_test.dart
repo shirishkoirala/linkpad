@@ -13,6 +13,7 @@ class FakePeer extends PeerClient {
   final typed = <String>[];
   final keys = <({String key, Set<String> modifiers})>[];
   bool available = true;
+  bool standaloneSuper = true;
   bool responsePaused = false;
   @override
   bool get waitingForResponse => connected && responsePaused;
@@ -29,6 +30,8 @@ class FakePeer extends PeerClient {
   bool get canKeyboard => available;
   @override
   bool get supportsKeyboard => true;
+  @override
+  bool get supportsStandaloneSuper => standaloneSuper;
   @override
   bool get canKey => available;
   @override

@@ -10,6 +10,7 @@ const Pointer = "pointer.v1"
 const Scroll = "scroll.v1"
 const Key = "key.v1"
 const Keyboard = "keyboard.v1"
+const SuperKey = "keyboard.super.v1"
 const Drag = "drag.v1"
 
 type Message struct {

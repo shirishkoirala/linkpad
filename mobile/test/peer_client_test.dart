@@ -5,8 +5,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linkpad_controller/peer_client.dart';
 
-Future<void> waitFor(PeerClient peer, bool Function() condition) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 5));
+Future<void> waitFor(
+  PeerClient peer,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(timeout);
   while (!condition()) {
     if (DateTime.now().isAfter(deadline)) {
       fail('Timed out; client status: ${peer.status}');
@@ -25,6 +29,7 @@ void main() {
   final sockets = <WebSocket>[];
   bool provedIdentity = false;
   bool acknowledge = true;
+  Duration ackDelay = Duration.zero;
   bool omitCapabilities = false;
   var capabilities = ['pointer.v1'];
   String? rejectReason;
@@ -61,6 +66,7 @@ void main() {
     );
     received.clear();
     acknowledge = true;
+    ackDelay = Duration.zero;
     omitCapabilities = false;
     capabilities = ['pointer.v1'];
     rejectReason = null;
@@ -93,7 +99,19 @@ void main() {
             }),
           );
         } else if (acknowledge) {
-          socket.add(jsonEncode({'version': 1, 'type': 'ack'}));
+          if (ackDelay == Duration.zero) {
+            socket.add(jsonEncode({'version': 1, 'type': 'ack'}));
+          } else {
+            Future<void>.delayed(ackDelay, () {
+              if (socket.readyState == WebSocket.open) {
+                try {
+                  socket.add(jsonEncode({'version': 1, 'type': 'ack'}));
+                } on StateError {
+                  /* The test may have closed the sink. */
+                }
+              }
+            });
+          }
         }
       });
     });
@@ -115,6 +133,38 @@ void main() {
     }
     await server.close(force: true);
   });
+
+  test(
+    'standalone Super requires explicit server capability and resets on reconnect',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1', 'keyboard.super.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canKeyboard);
+      expect(peer.supportsStandaloneSuper, isTrue);
+      expect(peer.keyboardKey('super'), isTrue);
+      await waitFor(peer, () => received.length == 2);
+      expect(received.last['key'], 'super');
+      peer.disconnect();
+      expect(peer.supportsStandaloneSuper, isFalse);
+      capabilities = ['pointer.v1', 'keyboard.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canKeyboard);
+      expect(peer.keyboardKey('super'), isFalse);
+      expect(peer.keyboardKey('e', modifiers: {'super'}), isTrue);
+      await waitFor(peer, () => received.length == 4);
+      expect(received.last['key'], 'e');
+    },
+  );
 
   test(
     'switching between verified computers closes the old drag and preserves both pairings',
@@ -296,6 +346,139 @@ void main() {
     await waitFor(peer, () => sockets.length >= 2 && peer.ready);
     expect(peer.dragging, isFalse);
     expect(received.where((m) => m['action'] == 'start').length, 1);
+  });
+
+  test(
+    'full keyboard queue rejects new input visibly and resumes after draining',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1'];
+      acknowledge = false;
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canKeyboard);
+      for (var i = 0; i < 64; i++) {
+        expect(peer.typeText('$i'), isTrue);
+      }
+      expect(peer.inputQueueFull, isTrue);
+      expect(peer.canKeyboard, isFalse);
+      expect(peer.typeText('overflow'), isFalse);
+      await waitFor(
+        peer,
+        () => received.where((m) => m['type'] == 'keyboard').length == 1,
+      );
+      expect(peer.inputQueueFull, isFalse);
+      expect(peer.canKeyboard, isTrue);
+      acknowledge = true;
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(
+        peer,
+        () => received.where((m) => m['type'] == 'keyboard').length == 64,
+      );
+      expect(
+        received.where((m) => m['type'] == 'keyboard').map((m) => m['text']),
+        List.generate(64, (i) => '$i'),
+      );
+    },
+  );
+
+  test(
+    'focus click survives keyboard backlog while stale motion expires',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1'];
+      acknowledge = false;
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canKeyboard);
+      peer.typeText('a');
+      await waitFor(peer, () => received.length == 2);
+      peer.move(20, 0);
+      peer.click('left');
+      peer.typeText('b');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      acknowledge = true;
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 4);
+      expect(received[2]['button'], 'left');
+      expect(received[3]['text'], 'b');
+      expect(received.where((m) => m['dx'] == 20), isEmpty);
+    },
+  );
+
+  test(
+    'keyboard ordering never converts held drag movement into a pointer click path',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1', 'drag.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canDrag);
+      peer.startDrag();
+      await waitFor(peer, () => received.length == 2);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      acknowledge = false;
+      peer.typeText('a');
+      await waitFor(peer, () => received.length == 3);
+      peer.move(10, 0);
+      peer.typeText('b');
+      peer.endDrag();
+      acknowledge = true;
+      sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      await waitFor(peer, () => received.length == 6);
+      expect(received[3]['type'], 'drag');
+      expect(received[3]['action'], 'move');
+      expect(received[4]['action'], 'end');
+      expect(received[5]['text'], 'b');
+    },
+  );
+
+  test('accepted keyboard backlog survives more than three seconds', () async {
+    capabilities = ['pointer.v1', 'keyboard.v1'];
+    ackDelay = const Duration(milliseconds: 200);
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.canKeyboard);
+    for (var i = 0; i < 20; i++) {
+      expect(peer.typeText('$i'), isTrue);
+    }
+    await waitFor(
+      peer,
+      () => received.where((m) => m['type'] == 'keyboard').length == 20,
+      timeout: const Duration(seconds: 10),
+    );
+    expect(
+      received.where((m) => m['type'] == 'keyboard').map((m) => m['text']),
+      List.generate(20, (i) => '$i'),
+    );
+  });
+
+  test('click precedes a later keyboard press before the next frame', () async {
+    capabilities = ['pointer.v1', 'keyboard.v1'];
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.canKeyboard);
+    peer.click('left');
+    peer.typeText('a');
+    await waitFor(peer, () => received.length == 3);
+    expect(received.skip(1).map((m) => m['type']), ['pointer', 'keyboard']);
   });
 
   test(

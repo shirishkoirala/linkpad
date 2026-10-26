@@ -61,7 +61,7 @@ func keyboardStrokes(mapping []xproto.Keysym, width int, min byte, key, text str
 		}
 		return 0, false, fmt.Errorf("character unavailable in the active X11 keyboard layout")
 	}
-	names := map[string]xproto.Keysym{"up": 0xff52, "down": 0xff54, "left": 0xff51, "right": 0xff53, "enter": 0xff0d, "backspace": 0xff08, "tab": 0xff09, "escape": 0xff1b, "space": 32, "delete": 0xffff, "home": 0xff50, "end": 0xff57, "pageup": 0xff55, "pagedown": 0xff56}
+	names := map[string]xproto.Keysym{"super": 0xffeb, "up": 0xff52, "down": 0xff54, "left": 0xff51, "right": 0xff53, "enter": 0xff0d, "backspace": 0xff08, "tab": 0xff09, "escape": 0xff1b, "space": 32, "delete": 0xffff, "home": 0xff50, "end": 0xff57, "pageup": 0xff55, "pagedown": 0xff56}
 	modNames := map[string]xproto.Keysym{"shift": 0xffe1, "ctrl": 0xffe3, "alt": 0xffe9, "super": 0xffeb}
 	var mods []byte
 	for _, m := range modifiers {

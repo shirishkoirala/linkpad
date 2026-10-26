@@ -22,4 +22,11 @@ void main() {
       throwsArgumentError,
     );
   });
+  test('standalone Super is a key press without chord modifiers', () {
+    expect(jsonDecode(keyboardMessage(key: 'super'))['key'], 'super');
+    expect(
+      () => keyboardMessage(key: 'super', modifiers: {'ctrl'}),
+      throwsArgumentError,
+    );
+  });
 }

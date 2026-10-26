@@ -96,6 +96,20 @@ class _ControlDeckState extends State<ControlDeck> {
     });
   }
 
+  void _toggleSuper() => setState(() {
+    modifiers.contains('super')
+        ? modifiers.remove('super')
+        : modifiers.add('super');
+  });
+
+  void _tapSuper() {
+    if (modifiers.contains('super') || !peer.supportsStandaloneSuper) {
+      _toggleSuper();
+    } else {
+      peer.keyboardKey('super');
+    }
+  }
+
   void _key(String key) {
     if (peer.keyboardKey(key, modifiers: {...modifiers, if (shift) 'shift'})) {
       setState(() {
@@ -296,8 +310,10 @@ class _ControlDeckState extends State<ControlDeck> {
     VoidCallback action, {
     bool enabled = true,
     bool selected = false,
+    VoidCallback? onLongPress,
   }) => FilledButton.tonal(
     onPressed: enabled ? action : null,
+    onLongPress: enabled ? onLongPress : null,
     style: FilledButton.styleFrom(
       minimumSize: const Size(0, 48),
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -318,6 +334,7 @@ class _ControlDeckState extends State<ControlDeck> {
       VoidCallback action, {
       bool selected = false,
       int flex = 1,
+      VoidCallback? onLongPress,
     }) => Expanded(
       flex: flex,
       child: Padding(
@@ -329,6 +346,7 @@ class _ControlDeckState extends State<ControlDeck> {
             action,
             enabled: peer.canKeyboard,
             selected: selected,
+            onLongPress: onLongPress,
           ),
         ),
       ),
@@ -346,11 +364,14 @@ class _ControlDeckState extends State<ControlDeck> {
                     : mod == 'ctrl'
                     ? 'Ctrl'
                     : 'Alt',
-                () => setState(() {
-                  modifiers.contains(mod)
-                      ? modifiers.remove(mod)
-                      : modifiers.add(mod);
-                }),
+                mod == 'super'
+                    ? _tapSuper
+                    : () => setState(() {
+                        modifiers.contains(mod)
+                            ? modifiers.remove(mod)
+                            : modifiers.add(mod);
+                      }),
+                onLongPress: mod == 'super' ? _toggleSuper : null,
                 selected: modifiers.contains(mod),
               ),
           ],

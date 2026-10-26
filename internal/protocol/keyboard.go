@@ -25,6 +25,10 @@ func (m Message) ValidateKeyboard() error {
 	}
 	if m.Key != "" {
 		switch m.Key {
+		case "super":
+			if len(m.Modifiers) != 0 {
+				return fmt.Errorf("standalone Super cannot have modifiers")
+			}
 		case "up", "down", "left", "right", "enter", "backspace", "tab", "escape", "space", "delete", "home", "end", "pageup", "pagedown":
 		default:
 			if len(m.Key) != 1 || m.Key[0] < 32 || m.Key[0] > 126 {

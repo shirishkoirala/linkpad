@@ -1,11 +1,18 @@
 import 'dart:collection';
 
 class PointerInput {
-  const PointerInput(this.dx, this.dy, [this.button, this.isScroll = false]);
+  const PointerInput(
+    this.dx,
+    this.dy, [
+    this.button,
+    this.isScroll = false,
+    this.created = Duration.zero,
+  ]);
   final int dx;
   final int dy;
   final String? button;
   final bool isScroll;
+  final Duration created;
 }
 
 class _Input {
@@ -87,13 +94,13 @@ class InputBuffer {
     final input = _queue.first;
     if (input.button != null) {
       _queue.removeFirst();
-      return PointerInput(0, 0, input.button);
+      return PointerInput(0, 0, input.button, false, input.created);
     }
     final dx = input.dx.truncate();
     final dy = input.dy.truncate();
     input.dx -= dx;
     input.dy -= dy;
     if (input.dx == 0 && input.dy == 0) _queue.removeFirst();
-    return PointerInput(dx, dy, null, input.isScroll);
+    return PointerInput(dx, dy, null, input.isScroll, input.created);
   }
 }

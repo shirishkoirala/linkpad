@@ -9,6 +9,78 @@ import 'package:linkpad_controller/relative_touchpad.dart';
 import 'control_deck_test.dart' show FakePeer;
 
 void main() {
+  testWidgets('older servers retain tap-to-latch Super shortcuts', (
+    tester,
+  ) async {
+    final peer = FakePeer()..standaloneSuper = false;
+    addTearDown(peer.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: linkpadTheme(Brightness.light),
+        home: RemotePage(peer: peer, onSettings: () {}),
+      ),
+    );
+    await tester.ensureVisible(find.text('Win / Cmd'));
+    await tester.tap(find.text('Win / Cmd'));
+    await tester.pump();
+    expect(peer.keys, isEmpty);
+    await tester.ensureVisible(find.byIcon(Icons.keyboard_arrow_left));
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_left));
+    await tester.pump();
+    expect(peer.keys.last.key, 'left');
+    expect(peer.keys.last.modifiers, {'super'});
+  });
+
+  testWidgets('Win Command tap sends standalone and hold prepares a shortcut', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final peer = FakePeer(), settings = CursorSettings();
+    addTearDown(peer.dispose);
+    addTearDown(settings.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: linkpadTheme(Brightness.light),
+        home: ControlDeck(peer: peer, settings: settings),
+      ),
+    );
+    await tester.tap(find.text('Remote'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Win / Cmd'));
+    await tester.pump();
+    expect(peer.keys.last.key, 'super');
+    expect(peer.keys.last.modifiers, isEmpty);
+    final count = peer.keys.length;
+    await tester.longPress(find.text('Win / Cmd'));
+    await tester.pump();
+    await tester.tap(find.text('Win / Cmd'));
+    await tester.pump();
+    expect(peer.keys.length, count);
+    await tester.longPress(find.text('Win / Cmd'));
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_left));
+    await tester.pump();
+    expect(peer.keys.last.key, 'left');
+    expect(peer.keys.last.modifiers, {'super'});
+    await tester.tap(find.text('Keyboard'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Win / Cmd'));
+    await tester.tap(find.text('Win / Cmd'));
+    await tester.pump();
+    expect(peer.keys.last.key, 'super');
+    expect(peer.keys.last.modifiers, isEmpty);
+    await tester.longPress(find.text('Win / Cmd'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('e'));
+    await tester.tap(find.text('e'));
+    await tester.pump();
+    expect(peer.keys.last.key, 'e');
+    expect(peer.keys.last.modifiers, {'super'});
+  });
+
   testWidgets('Remote touchpad uses sensitivity without scrolling the page', (
     tester,
   ) async {
@@ -161,7 +233,7 @@ void main() {
     await tester.pump();
     expect(peer.keys.last.key, 'enter');
     await tester.ensureVisible(find.text('Win / Cmd'));
-    await tester.tap(find.text('Win / Cmd'));
+    await tester.longPress(find.text('Win / Cmd'));
     await tester.pump();
     await tester.ensureVisible(find.byIcon(Icons.keyboard_arrow_left));
     await tester.tap(find.byIcon(Icons.keyboard_arrow_left));
@@ -193,7 +265,7 @@ void main() {
     );
     await tester.tap(find.text('Remote'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Win / Cmd'));
+    await tester.longPress(find.text('Win / Cmd'));
     await tester.pump();
     await tester.tap(find.text('Keyboard'));
     await tester.pumpAndSettle();

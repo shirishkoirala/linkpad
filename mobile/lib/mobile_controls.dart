@@ -33,6 +33,8 @@ class MobileControlScaffold extends StatelessWidget {
       PeerState.connected =>
         peer.waitingForResponse
             ? 'Connection slow · Input paused'
+            : peer.inputQueueFull
+            ? 'Sending queued keys… · Please wait'
             : inputReady
             ? 'Connected · Ready to control'
             : 'Input unavailable · Check desktop permissions',
@@ -214,7 +216,7 @@ class MobileControlNotice extends StatelessWidget {
         : peer.ready;
     final message =
         peer.storageWarning ??
-        (!peer.connected || peer.waitingForResponse
+        (!peer.connected || peer.waitingForResponse || peer.inputQueueFull
             ? null
             : !inputReady
             ? 'Desktop input unavailable. Check the desktop server permissions.'

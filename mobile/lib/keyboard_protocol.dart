@@ -16,7 +16,11 @@ String keyboardMessage({
           text.runes.any((r) => r < 32 || (r >= 127 && r < 160)))) {
     throw ArgumentError('Invalid keyboard text');
   }
+  if (key == 'super' && modifiers.isNotEmpty) {
+    throw ArgumentError('Standalone Super cannot have modifiers');
+  }
   const keys = {
+    'super',
     'up',
     'down',
     'left',

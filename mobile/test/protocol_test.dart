@@ -36,6 +36,7 @@ void main() {
         'scroll.v1',
         'key.v1',
         'keyboard.v1',
+        'keyboard.super.v1',
         'drag.v1',
       ],
     });
