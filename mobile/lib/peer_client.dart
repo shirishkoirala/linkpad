@@ -42,6 +42,8 @@ class PeerTiming {
     this.connectTimeout = const Duration(seconds: 10),
     this.responseTimeout = const Duration(seconds: 5),
     this.inputMaxAge = const Duration(milliseconds: 150),
+    // Typing waits for ordered acknowledgements; it must outlive normal jitter.
+    this.keyboardMaxAge = const Duration(seconds: 3),
     this.inputPauseAfter = const Duration(milliseconds: 500),
     this.maxMotionInFlight = 4,
     this.frameInterval = const Duration(milliseconds: 16),
@@ -51,6 +53,7 @@ class PeerTiming {
   });
   final Duration connectTimeout, responseTimeout, inputMaxAge, frameInterval;
   final Duration inputPauseAfter;
+  final Duration keyboardMaxAge;
   final int maxMotionInFlight;
   final Duration heartbeat, retryBase, retryMax;
 
@@ -505,7 +508,7 @@ class PeerClient extends ChangeNotifier {
 
   void _expireCommands() {
     while (_commands.isNotEmpty &&
-        _clock.elapsed - _commands.first.created >= timing.inputMaxAge) {
+        _clock.elapsed - _commands.first.created >= timing.keyboardMaxAge) {
       _commands.removeFirst();
     }
   }

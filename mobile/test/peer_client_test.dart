@@ -299,6 +299,78 @@ void main() {
   });
 
   test(
+    'queued keyboard presses survive slow acknowledgements in order',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1'];
+      acknowledge = false;
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canKeyboard);
+      expect(peer.typeText('h'), isTrue);
+      expect(peer.typeText('i'), isTrue);
+      expect(peer.keyboardKey('backspace'), isTrue);
+      expect(peer.typeText('!'), isTrue);
+      for (var count = 1; count <= 4; count++) {
+        await waitFor(
+          peer,
+          () => received.where((m) => m['type'] == 'keyboard').length == count,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        sockets.last.add(jsonEncode({'version': 1, 'type': 'ack'}));
+      }
+      final events = received.where((m) => m['type'] == 'keyboard').toList();
+      expect(events.map((m) => m['text'] ?? m['key']), [
+        'h',
+        'i',
+        'backspace',
+        '!',
+      ]);
+      expect(events, hasLength(4));
+    },
+  );
+
+  test('disconnect discards queued keyboard presses', () async {
+    capabilities = ['pointer.v1', 'keyboard.v1'];
+    acknowledge = false;
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.canKeyboard);
+    peer.typeText('a');
+    peer.typeText('b');
+    await waitFor(
+      peer,
+      () => received.where((m) => m['type'] == 'keyboard').length == 1,
+    );
+    peer.disconnect();
+    acknowledge = true;
+    await peer.connect(
+      'wss://127.0.0.1:${server.port}/ws',
+      fingerprint,
+      '',
+      () {},
+    );
+    await waitFor(peer, () => peer.canKeyboard);
+    peer.typeText('c');
+    await waitFor(
+      peer,
+      () => received.where((m) => m['type'] == 'keyboard').length == 2,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(
+      received.where((m) => m['type'] == 'keyboard').map((m) => m['text']),
+      ['a', 'c'],
+    );
+  });
+
+  test(
     'keyboard input is queued in order until each acknowledgement',
     () async {
       capabilities = ['pointer.v1', 'keyboard.v1'];
