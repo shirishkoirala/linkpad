@@ -11,7 +11,9 @@ bool macInstallationNeedsMove(String executable) =>
     executable.contains('/AppTranslocation/');
 
 class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
-  DesktopPlatform(this.server);
+  DesktopPlatform(this.server) {
+    server.addListener(_serverChanged);
+  }
   final ServerController server;
   bool trayReady = false;
   bool loginEnabled = false;
@@ -19,6 +21,8 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   bool _quitting = false;
   String? error;
   bool? _menuRunning;
+  String? _shownPairingSecret;
+  int _shownPairingDisplay = 0;
   bool permissionCheckBusy = false;
   bool _awaitingPermission = false;
   bool get isMacOS => Platform.isMacOS;
@@ -67,11 +71,25 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
     } catch (_) {
       error = 'Could not read the start-at-login setting.';
     }
-    server.addListener(_serverChanged);
     notifyListeners();
   }
 
   void _serverChanged() {
+    final secret = server.pairing?['secret'] as String?;
+    if (secret != _shownPairingSecret ||
+        server.pairingDisplay != _shownPairingDisplay) {
+      _shownPairingDisplay = server.pairingDisplay;
+      _shownPairingSecret = secret;
+      if (secret != null) {
+        unawaited(
+          show().catchError((Object _) {
+            error =
+                'Pairing code is ready. Open Linkpad from the dock or tray.';
+            notifyListeners();
+          }),
+        );
+      }
+    }
     if (trayReady && _menuRunning != server.running) unawaited(_updateMenu());
     if (_awaitingPermission &&
         server.inputPermissionGranted == true &&

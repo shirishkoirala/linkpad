@@ -11,6 +11,7 @@ import 'protocol.dart';
 import 'keyboard_protocol.dart';
 import 'drag_protocol.dart';
 import 'computer_store.dart';
+import 'server_discovery.dart';
 
 String generateIdentity() {
   final pair = CryptoUtils.generateEcKeyPair();
@@ -61,14 +62,29 @@ class PeerTiming {
 }
 
 class PeerClient extends ChangeNotifier {
-  PeerClient({this.timing = const PeerTiming(), ComputerStore? computers})
-    : _input = InputBuffer(maxAge: timing.inputMaxAge),
-      computers = computers ?? ComputerStore(),
-      _ownsComputers = computers == null {
-    this.computers.addListener(_notify);
+  PeerClient({
+    this.timing = const PeerTiming(),
+    ComputerStore? computers,
+    ServerDiscovery? discovery,
+  }) : _discovery =
+           discovery ??
+           (Platform.isIOS || Platform.isAndroid
+               ? BonjourServerDiscovery()
+               : NoServerDiscovery()),
+       _input = InputBuffer(maxAge: timing.inputMaxAge),
+       computers = computers ?? ComputerStore(),
+       _ownsComputers = computers == null {
+    this.computers.addListener(_computersChanged);
   }
 
   static const storage = FlutterSecureStorage();
+  final ServerDiscovery _discovery;
+  Future<List<DiscoveredServer>>? _discoveryResult;
+  final _recoveryAddresses = Queue<Uri>();
+  Uri? _verifiedAddress;
+  bool _knownPaired = false, _usingDiscoveryCandidate = false;
+  bool findingComputer = false;
+  String? discoveryWarning, _savedCertificateFailure;
   final PeerTiming timing;
   final ComputerStore computers;
   final bool _ownsComputers;
@@ -122,6 +138,7 @@ class PeerClient extends ChangeNotifier {
   int get reconnectCount => _reconnectCount;
   String get connectionDetails => [
     connectionSummary,
+    if (discoveryWarning != null) 'Discovery: $discoveryWarning',
     'Response time includes the network round trip and desktop processing.',
     if (_peakRoundTripTime != null)
       'Peak response: ${_peakRoundTripTime!.inMilliseconds} ms',
@@ -174,6 +191,49 @@ class PeerClient extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Requests only that the desktop display its QR; never enrolls this phone.
+  Future<bool> requestPairingDisplay(DiscoveredServer server) async {
+    HttpClient? client;
+    try {
+      final context = await (_identityFuture ??= _identity()).timeout(
+        const Duration(seconds: 4),
+      );
+      final address = server.address;
+      if (address.scheme != 'wss' || address.userInfo.isNotEmpty) return false;
+      client = HttpClient(context: context)
+        ..connectionTimeout = const Duration(seconds: 3)
+        ..badCertificateCallback = (cert, host, port) {
+          final now = DateTime.now();
+          return host == address.host &&
+              sha256.convert(cert.der).toString() == server.fingerprint &&
+              !now.isBefore(cert.startValidity) &&
+              !now.isAfter(cert.endValidity);
+        };
+      final http = client;
+      Future<bool> send() async {
+        final request = await http.postUrl(
+          address.replace(
+            scheme: 'https',
+            path: '/pairing/request',
+            query: null,
+            fragment: null,
+          ),
+        );
+        request.followRedirects = false;
+        request.contentLength = 0;
+        final response = await request.close();
+        return response.statusCode == HttpStatus.accepted ||
+            response.statusCode == HttpStatus.tooManyRequests;
+      }
+
+      return await send().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      return false;
+    } finally {
+      client?.close(force: true);
+    }
+  }
+
   Future<SecurityContext> _identity() async {
     var saved = await storage.read(key: 'peer_identity_v1');
     if (saved == null) {
@@ -195,8 +255,10 @@ class PeerClient extends ChangeNotifier {
   ) async {
     if (_disposed) return;
     disconnect();
+    final selectionGeneration = _generation;
     try {
       _address = peerAddress(address);
+      _verifiedAddress = _address;
       final pin = fingerprint.trim().toLowerCase();
       if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(pin)) {
         throw const FormatException(
@@ -212,6 +274,7 @@ class PeerClient extends ChangeNotifier {
     _canRetry = token.trim().isEmpty;
     _onPaired = onPaired;
     storageWarning = null;
+    _knownPaired = token.trim().isEmpty && computers.find(_pin) != null;
     if (!_foreground) {
       if (!_canRetry) {
         _fatal('Open the app and enter a fresh pairing secret to pair.');
@@ -221,6 +284,9 @@ class PeerClient extends ChangeNotifier {
       }
       return;
     }
+    await computers.load();
+    if (selectionGeneration != _generation || !_desired) return;
+    _knownPaired = token.trim().isEmpty && computers.find(_pin) != null;
     await _attempt(token.trim());
   }
 
@@ -228,6 +294,28 @@ class PeerClient extends ChangeNotifier {
     if (!_desired || !_foreground || _disposed) return;
     _closeTransport();
     final generation = _generation;
+    _usingDiscoveryCandidate = _recoveryAddresses.isNotEmpty;
+    _address = _usingDiscoveryCandidate
+        ? _recoveryAddresses.removeFirst()
+        : _verifiedAddress;
+    if (!_usingDiscoveryCandidate) _beginDiscovery();
+    if (const bool.fromEnvironment('LINKPAD_DIAGNOSTICS')) {
+      debugPrint(
+        'LP CONNECT address=$_address paired=$_knownPaired candidate=$_usingDiscoveryCandidate',
+      );
+      if (_retryAttempt == 0) {
+        unawaited(
+          NetworkInterface.list(type: InternetAddressType.IPv4)
+              .then((items) {
+                debugPrint(
+                  'LP NETWORK ${items.map((i) => '${i.name}:${i.addresses.map((a) => a.address).join(',')}').join(' ')}',
+                );
+              })
+              .catchError((Object _) {}),
+        );
+      }
+    }
+
     state = _hadConnected || _retryAttempt > 0
         ? PeerState.reconnecting
         : PeerState.connecting;
@@ -253,7 +341,11 @@ class PeerClient extends ChangeNotifier {
     String? certificateFailure;
     try {
       final http = HttpClient(context: context)
-        ..connectionTimeout = timing.connectTimeout
+        ..connectionTimeout =
+            _usingDiscoveryCandidate &&
+                timing.connectTimeout > const Duration(seconds: 3)
+            ? const Duration(seconds: 3)
+            : timing.connectTimeout
         ..badCertificateCallback = (cert, host, port) {
           final now = DateTime.now();
           if (host != address.host ||
@@ -305,12 +397,20 @@ class PeerClient extends ChangeNotifier {
       );
       socket.add(hello(token));
     } catch (error) {
+      if (const bool.fromEnvironment('LINKPAD_DIAGNOSTICS')) {
+        debugPrint('LP CONNECT FAILED $error certificate=$certificateFailure');
+      }
       if (generation != _generation) return;
       if (certificateFailure != null || error is HandshakeException) {
-        _fatal(
-          certificateFailure ??
-              'Secure connection failed. Verify the desktop fingerprint and certificate.',
-        );
+        final reason =
+            certificateFailure ??
+            'Secure connection failed. Verify the desktop fingerprint and certificate.';
+        if (_knownPaired && _canRetry) {
+          if (!_usingDiscoveryCandidate) _savedCertificateFailure = reason;
+          _networkFailure(reason);
+        } else {
+          _fatal(reason);
+        }
       } else {
         _networkFailure(
           'Cannot reach your computer. Check its server and Wi-Fi connection.',
@@ -346,6 +446,10 @@ class PeerClient extends ChangeNotifier {
         _hadConnected = true;
         _canRetry = true;
         _retryAttempt = 0;
+        _verifiedAddress = _address;
+        _savedCertificateFailure = null;
+        _cancelDiscovery();
+        discoveryWarning = null;
         state = PeerState.connected;
         final onPaired = _onPaired;
         _onPaired = null;
@@ -425,7 +529,12 @@ class PeerClient extends ChangeNotifier {
     final address = _address.toString();
     final pin = _pin!;
     try {
-      final saved = await computers.saveVerified(address, pin);
+      final saved = await computers.saveVerified(
+        address,
+        pin,
+        stillCurrent: () =>
+            generation == _generation && _desired && _pin == pin,
+      );
       if (!saved) throw StateError('Could not save computer');
     } catch (_) {
       if (generation == _generation) {
@@ -673,19 +782,67 @@ class PeerClient extends ChangeNotifier {
     });
   }
 
+  void _computersChanged() {
+    if (_desired &&
+        _knownPaired &&
+        computers.loaded &&
+        computers.find(_pin) == null) {
+      disconnect();
+      return;
+    }
+    if (_desired && _canRetry && computers.find(_pin) != null) {
+      _knownPaired = true;
+    }
+    _notify();
+  }
+
+  void _beginDiscovery() {
+    if (!_knownPaired ||
+        !_canRetry ||
+        _pin == null ||
+        _discoveryResult != null) {
+      return;
+    }
+    final pin = _pin!;
+    _discoveryResult = _discovery
+        .find(pin, timeout: const Duration(seconds: 3))
+        .then((found) {
+          if (const bool.fromEnvironment('LINKPAD_DIAGNOSTICS')) {
+            debugPrint(
+              'LP DISCOVERED ${found.map((f) => f.address).join(',')}',
+            );
+          }
+          return found;
+        })
+        .catchError((Object error) {
+          if (const bool.fromEnvironment('LINKPAD_DIAGNOSTICS')) {
+            debugPrint('LP DISCOVERY ERROR $error');
+          }
+          if (_desired && _pin == pin) {
+            discoveryWarning =
+                'Local discovery unavailable. Check Local Network permission or scan a new QR code.';
+          }
+          return <DiscoveredServer>[];
+        });
+  }
+
+  void _cancelDiscovery() {
+    _discoveryResult = null;
+    _recoveryAddresses.clear();
+    findingComputer = false;
+    unawaited(_discovery.stop().catchError((Object _) {}));
+  }
+
   void _networkFailure(String reason) {
     _lastConnectionIssue = reason;
     _closeTransport();
     if (_desired && _foreground && _canRetry) {
       _reconnectCount++;
-      final delay = timing.retryDelay(_retryAttempt++);
       state = PeerState.reconnecting;
-      _message = '$reason Reconnecting in ${delay.inSeconds.clamp(1, 15)}s…';
+      _message = reason;
       final generation = _generation;
-      _retry = Timer(delay, () {
-        if (generation == _generation) unawaited(_attempt(''));
-      });
       _notify();
+      unawaited(_recoverAndRetry(reason, generation));
     } else {
       _fatal(
         '$reason Reconnect without a secret if pairing completed, or start a new pairing window.',
@@ -693,7 +850,46 @@ class PeerClient extends ChangeNotifier {
     }
   }
 
+  Future<void> _recoverAndRetry(String reason, int generation) async {
+    final search = _discoveryResult;
+    if (_recoveryAddresses.isEmpty && search != null) {
+      findingComputer = true;
+      _notify();
+      final found = await search;
+      if (generation != _generation || !_desired || !_foreground) return;
+      if (identical(_discoveryResult, search)) _discoveryResult = null;
+      for (final candidate in found) {
+        if (_recoveryAddresses.length >= 4) break;
+        if (candidate.fingerprint != _pin ||
+            candidate.address == _address ||
+            _recoveryAddresses.contains(candidate.address)) {
+          continue;
+        }
+        try {
+          _recoveryAddresses.add(peerAddress(candidate.address.toString()));
+        } on FormatException {
+          continue;
+        }
+      }
+    }
+    if (generation != _generation || !_desired || !_foreground) return;
+    findingComputer = false;
+    if (_recoveryAddresses.isEmpty && _savedCertificateFailure != null) {
+      _fatal(_savedCertificateFailure!);
+      return;
+    }
+    final delay = _recoveryAddresses.isNotEmpty
+        ? Duration.zero
+        : timing.retryDelay(_retryAttempt++);
+    _message = '$reason Reconnecting in ${delay.inSeconds.clamp(1, 15)}s…';
+    _retry = Timer(delay, () {
+      if (generation == _generation) unawaited(_attempt(''));
+    });
+    _notify();
+  }
+
   void _fatal(String message) {
+    _cancelDiscovery();
     _desired = false;
     _onPaired = null;
     _closeTransport();
@@ -707,6 +903,7 @@ class PeerClient extends ChangeNotifier {
     _foreground = active;
     if (!_desired) return;
     if (!active) {
+      _cancelDiscovery();
       _closeTransport();
       if (!_canRetry) {
         _fatal(
@@ -751,6 +948,9 @@ class PeerClient extends ChangeNotifier {
   }
 
   void disconnect() {
+    _cancelDiscovery();
+    _knownPaired = false;
+    _savedCertificateFailure = null;
     _lastConnectionIssue = null;
     _reconnectCount = 0;
     _desired = false;
@@ -766,7 +966,7 @@ class PeerClient extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    computers.removeListener(_notify);
+    computers.removeListener(_computersChanged);
     if (_ownsComputers) computers.dispose();
     disconnect();
     super.dispose();

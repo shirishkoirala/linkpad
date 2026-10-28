@@ -5,7 +5,11 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the pairing QR code on your computer to connect Linkpad without typing.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Linkpad connects to your desktop on your local network to control its pointer.</string>
+	<string>Linkpad finds and reconnects to your paired computers on your local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_linkpad._tcp</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -2,10 +2,15 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,5 +197,76 @@ func TestDesktopCancelAndRenewPairing(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("stop timed out")
+	}
+}
+
+func TestDesktopRemotePairingDisplay(t *testing.T) {
+	t.Run("creates code", func(t *testing.T) { testDesktopRemotePairingDisplay(t, false) })
+	t.Run("reuses active code", func(t *testing.T) { testDesktopRemotePairingDisplay(t, true) })
+}
+func testDesktopRemotePairingDisplay(t *testing.T, existing bool) {
+	state := t.TempDir()
+	in, statuses, _ := desktopTestStart(t, state)
+	initial := desktopTestRead(t, statuses, 0)
+	oldSecret := ""
+	if existing {
+		if err := json.NewEncoder(in).Encode(desktopCommand{ID: 1, Command: "pair"}); err != nil {
+			t.Fatal(err)
+		}
+		paired := desktopTestRead(t, statuses, 1)
+		if paired.Pairing == nil {
+			t.Fatal("manual code not created")
+		}
+		oldSecret = paired.Pairing.Secret
+	}
+	serverCert, err := identity.Load(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone, err := identity.Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Identity certs have no DNS SAN: test verifies the exact public cert instead.
+	transport := &http.Transport{TLSClientConfig: &tls.Config{Certificates: []tls.Certificate{phone}, InsecureSkipVerify: true, VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+		if len(raw) == 0 || string(raw[0]) != string(serverCert.Certificate[0]) {
+			return fmt.Errorf("wrong server identity")
+		}
+		return nil
+	}}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	url := strings.Replace(initial.Address, "wss://", "https://", 1)
+	url = strings.TrimSuffix(url, "/ws") + "/pairing/request"
+	resp, err := client.Post(url, "application/octet-stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("display request: %d", resp.StatusCode)
+	}
+	var invitation *pairingqr.Invitation
+	deadline := time.After(6 * time.Second)
+	for invitation == nil {
+		select {
+		case status := <-statuses:
+			invitation = status.Pairing
+		case <-deadline:
+			t.Fatal("QR never appeared")
+		}
+	}
+	if existing && invitation.Secret != oldSecret {
+		t.Fatal("remote display rotated active code")
+	}
+	if invitation.Secret == "" {
+		t.Fatal("missing local QR")
+	}
+	if err := json.NewEncoder(in).Encode(desktopCommand{ID: 42, Command: "status"}); err != nil {
+		t.Fatal(err)
+	}
+	next := desktopTestRead(t, statuses, 42)
+	if next.Pairing == nil || next.Pairing.Secret != invitation.Secret {
+		t.Fatal("active code rotated")
 	}
 }

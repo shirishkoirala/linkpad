@@ -167,3 +167,38 @@ Verified locally on macOS: release build, deep signature verification, server st
 Linux x86_64 container validation passes using Ubuntu 24.04, Flutter 3.44.0 / Dart 3.12.0, and Go 1.26.5: release GUI build, 68 Flutter tests, Go race tests including X11 input integration, static analysis, shared-library resolution, GTK startup with the bundled helper, and listener cleanup on parent termination. A physical Linux desktop still needs its own tray, login, and network checks.
 
 Login-item registration was left disabled during validation. macOS input requires the user to grant Accessibility permission to the current signed build.
+
+## Local discovery and changed addresses
+
+Updated servers advertise `_linkpad._tcp` on the local network using only their
+public certificate fingerprint and listener port. Updated phones keep trying the
+saved address and can rediscover the same paired identity if DHCP changes its IP.
+The actual TLS certificate must still match before a new address is saved; no new
+pairing token is sent and saved computer names are preserved.
+
+The server refreshes advertisements when interface addresses change and withdraws
+them on shutdown. Discovery failure does not stop ordinary QR/manual connections.
+On iPhone, allow Linkpad under Settings > Privacy & Security > Local Network.
+Networks that isolate clients or block multicast may require scanning a fresh QR
+or updating the manual address; do not delete a pairing just because its IP changed.
+Old servers must be upgraded to advertise discovery. The update does not change
+router settings, and it does not provide remote/cloud discovery.
+
+### Nearby computers
+
+The phone lists unpaired LAN servers under **Nearby computers** and refreshes while
+the chooser is open. Saved computers stay in the saved list. Forgetting an entry
+makes that identity eligible for nearby discovery again. Select **Pair**, then
+scan a fresh QR code on that computer or verify its fingerprint and enter its
+pairing secret manually. Discovery alone never grants control.
+
+### Request a QR from your phone
+
+Tap **Pair** beside a nearby computer to ask an updated desktop app to display
+its QR code. Linkpad raises its window and reveals the code. Existing active
+codes are reused; repeated requests are limited to one every ten seconds. The
+request never returns a pairing secret or grants access: scan the desktop QR
+or verify the fingerprint and enter its secret manually to pair.
+
+Both apps need this update. Older desktops and headless servers retain manual
+QR creation. The request does not start a stopped server or wake a sleeping PC.

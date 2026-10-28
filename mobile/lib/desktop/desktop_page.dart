@@ -21,6 +21,53 @@ class _DesktopPageState extends State<DesktopPage> {
   String? _actionError;
   ServerController get server => widget.server;
 
+  final _pairingQrKey = GlobalKey();
+  String? _visiblePairingSecret;
+  int _visiblePairingDisplay = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    server.addListener(_pairingChanged);
+  }
+
+  @override
+  void didUpdateWidget(DesktopPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.server != server) {
+      oldWidget.server.removeListener(_pairingChanged);
+      server.addListener(_pairingChanged);
+    }
+  }
+
+  void _pairingChanged() {
+    final secret = server.pairing?['secret'] as String?;
+    if (secret == _visiblePairingSecret &&
+        server.pairingDisplay == _visiblePairingDisplay) {
+      return;
+    }
+    _visiblePairingSecret = secret;
+    _visiblePairingDisplay = server.pairingDisplay;
+    if (secret == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _pairingQrKey.currentContext;
+      if (target != null) {
+        Scrollable.ensureVisible(
+          target,
+          alignment: 0.1,
+          duration: const Duration(milliseconds: 250),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    server.removeListener(_pairingChanged);
+    super.dispose();
+  }
+
   Future<void> _act(Future<void> Function() action) async {
     if (_commandBusy) return;
     setState(() {
@@ -344,6 +391,7 @@ class _DesktopPageState extends State<DesktopPage> {
           const SizedBox(height: 20),
           if (invitation != null) ...[
             Container(
+              key: _pairingQrKey,
               color: Colors.white,
               padding: const EdgeInsets.all(12),
               child: AspectRatio(

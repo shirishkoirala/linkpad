@@ -39,6 +39,7 @@ class ServerController extends ChangeNotifier {
   String inputError = '';
   String? error;
   Map<String, dynamic>? pairing;
+  int pairingDisplay = 0;
   List<DesktopPeer> peers = [];
   final List<String> _logs = [];
   Map<String, String> names = {};
@@ -180,6 +181,8 @@ class ServerController extends ChangeNotifier {
                 fingerprint = value['fingerprint'] as String? ?? '';
                 inputError = value['inputError'] as String? ?? '';
                 pairing = value['pairing'] as Map<String, dynamic>?;
+                pairingDisplay =
+                    (value['pairingDisplay'] as num?)?.toInt() ?? 0;
                 peers = (value['peers'] as List)
                     .map(
                       (p) => DesktopPeer(

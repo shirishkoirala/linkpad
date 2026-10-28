@@ -9,10 +9,13 @@ import 'pairing_invitation.dart';
 import 'pairing_scanner.dart';
 import 'phone_permissions.dart';
 import 'screen_awake.dart';
+import 'nearby_computers.dart';
+import 'server_discovery.dart';
 
 class ControllerPage extends StatefulWidget {
-  const ControllerPage({super.key, this.peer});
+  const ControllerPage({super.key, this.peer, this.nearbyDiscovery});
   final PeerClient? peer;
+  final BonjourServerDiscovery? nearbyDiscovery;
   @override
   State<ControllerPage> createState() => _ControllerPageState();
 }
@@ -28,6 +31,7 @@ class _ControllerPageState extends State<ControllerPage>
   ComputerStore get computers => peer.computers;
   String? selectedId;
   bool _settingsReady = false;
+  bool _requestingPairing = false;
   final _manualDetails = ExpansibleController();
 
   @override
@@ -86,18 +90,30 @@ class _ControllerPageState extends State<ControllerPage>
     await _connect();
   }
 
-  Future<void> _pair() async {
+  Future<void> _pair({DiscoveredServer? nearby}) async {
+    if (_requestingPairing) return;
     FocusScope.of(context).unfocus();
     peer.disconnect();
     token.clear();
-    if (computers.computers.isEmpty) {
+    var requested = false;
+    if (nearby != null) {
+      setState(() => _requestingPairing = true);
+      requested = await peer.requestPairingDisplay(nearby);
+      if (!mounted) return;
+      setState(() => _requestingPairing = false);
+      address.text = nearby.address.toString();
+      pin.text = nearby.fingerprint;
+    }
+    if (computers.computers.isEmpty || nearby != null) {
       final scan = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           scrollable: true,
           title: const Text('Connect to a computer'),
-          content: const Text(
-            'Open Linkpad on your computer and create a pairing code. Keep both devices on the same local network.\n\nAllow Camera when you scan. If iPhone asks for Local Network access while connecting, choose Allow.',
+          content: Text(
+            requested
+                ? 'Look for the QR code on your computer and scan it. If it doesn’t appear, open Linkpad and click Create pairing code.'
+                : 'Open Linkpad on your computer and create a pairing code. Keep both devices on the same local network.\n\nAllow Camera when you scan. If iPhone asks for Local Network access while connecting, choose Allow.',
           ),
           actions: [
             TextButton(
@@ -127,6 +143,16 @@ class _ControllerPageState extends State<ControllerPage>
     }
     if (result is! PairingInvitation) return;
     final invitation = result;
+    if (nearby != null && invitation.fingerprint != nearby.fingerprint) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This code belongs to a different computer. Scan the code on the selected computer.',
+          ),
+        ),
+      );
+      return;
+    }
     address.text = invitation.address;
     pin.text = invitation.fingerprint;
     token.text = invitation.secret;
@@ -385,8 +411,15 @@ class _ControllerPageState extends State<ControllerPage>
                   onPressed: peer.disconnect,
                   child: const Text('Cancel connection'),
                 ),
+              if (_requestingPairing) const LinearProgressIndicator(),
+              NearbyComputers(
+                discovery: widget.nearbyDiscovery,
+                savedIds: saved.map((c) => c.id).toSet(),
+                enabled: !peer.busy && !_requestingPairing,
+                onPair: (server) => _pair(nearby: server),
+              ),
               OutlinedButton.icon(
-                onPressed: peer.busy ? null : _pair,
+                onPressed: peer.busy || _requestingPairing ? null : _pair,
                 icon: const Icon(Icons.qr_code_scanner),
                 label: Text(
                   saved.isEmpty ? 'Pair a computer' : 'Pair another computer',

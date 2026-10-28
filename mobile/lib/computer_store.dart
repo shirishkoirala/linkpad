@@ -159,13 +159,14 @@ class ComputerStore extends ChangeNotifier {
     }
   }
 
-  Future<bool> _change(void Function() edit) {
+  Future<bool> _change(void Function() edit, {bool Function()? allowed}) {
     final result = _writes.then((_) async {
       await load();
       if (!_readSucceeded) {
         _notify();
         return false;
       }
+      if (allowed != null && !allowed()) return false;
       edit();
       _notify();
       final saved = await _persist();
@@ -181,6 +182,7 @@ class ComputerStore extends ChangeNotifier {
     String address,
     String fingerprint, {
     DateTime? usedAt,
+    bool Function()? stillCurrent,
   }) {
     final uri = peerAddress(address);
     final pin = fingerprint.toLowerCase();
@@ -197,7 +199,7 @@ class ComputerStore extends ChangeNotifier {
         lastUsed: (usedAt ?? DateTime.now()).toUtc(),
       );
       lastUsedId = pin;
-    });
+    }, allowed: stillCurrent);
   }
 
   Future<bool> rename(String id, String name) {

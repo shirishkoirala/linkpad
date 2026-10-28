@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"example.org/linkpad/internal/discovery"
 	"example.org/linkpad/internal/identity"
 	"example.org/linkpad/internal/node"
 	"example.org/linkpad/internal/pairingqr"
@@ -10,9 +12,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -129,13 +134,27 @@ func run() error {
 		}
 	}
 	n := &node.Node{Trust: trust, Plugins: registry}
+	defer n.DisconnectAll()
+	listener, err := net.Listen("tcp", *listen)
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	stopDiscovery, discoveryErr := discovery.Start(ctx, listener, identity.Fingerprint(cert.Certificate[0]), func(err error) { log.Printf("Discovery: %v", err) })
+	if discoveryErr != nil {
+		log.Printf("Discovery unavailable: %v", discoveryErr)
+	} else {
+		defer stopDiscovery()
+	}
 	if *pair {
 		n.Pairing, err = node.NewPairing(2 * time.Minute)
 		if err != nil {
 			return err
 		}
 		fmt.Println("Single-use pairing secret (expires in 2 minutes):", n.Pairing.Secret())
-		address, qrErr := pairingqr.Address(*listen, *advertise)
+		address, qrErr := pairingqr.Address(listener.Addr().String(), *advertise)
 		if qrErr != nil {
 			return fmt.Errorf("pairing QR address: %w", qrErr)
 		}
@@ -156,6 +175,16 @@ func run() error {
 		}
 	}
 	server := &http.Server{Addr: *listen, Handler: n.Handler(), TLSConfig: n.TLS(cert), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
-	fmt.Println("Listening on", *listen)
-	return server.ListenAndServeTLS("", "")
+	fmt.Println("Listening on", listener.Addr())
+	go func() {
+		<-ctx.Done()
+		shutdown, done := context.WithTimeout(context.Background(), time.Second)
+		defer done()
+		_ = server.Shutdown(shutdown)
+	}()
+	err = server.ServeTLS(listener, "", "")
+	if err == http.ErrServerClosed {
+		return nil
+	}
+	return err
 }

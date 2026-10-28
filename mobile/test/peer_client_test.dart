@@ -1,9 +1,30 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linkpad_controller/peer_client.dart';
+import 'package:linkpad_controller/server_discovery.dart';
+
+class FakeDiscovery implements ServerDiscovery {
+  List<DiscoveredServer> candidates = [];
+  Future<List<DiscoveredServer>>? pending;
+  int searches = 0, stops = 0;
+  @override
+  Future<List<DiscoveredServer>> find(
+    String fingerprint, {
+    required Duration timeout,
+  }) async {
+    searches++;
+    return pending == null ? candidates : await pending!;
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+  }
+}
 
 Future<void> waitFor(
   PeerClient peer,
@@ -28,6 +49,8 @@ void main() {
   final received = <Map<String, dynamic>>[];
   final sockets = <WebSocket>[];
   bool provedIdentity = false;
+  int pairingDisplayRequests = 0;
+  int pairingDisplayStatus = 202;
   bool acknowledge = true;
   Duration ackDelay = Duration.zero;
   bool omitCapabilities = false;
@@ -65,6 +88,8 @@ void main() {
       requestClientCertificate: true,
     );
     received.clear();
+    pairingDisplayRequests = 0;
+    pairingDisplayStatus = 202;
     acknowledge = true;
     ackDelay = Duration.zero;
     omitCapabilities = false;
@@ -78,6 +103,13 @@ void main() {
           clientCertificate.replaceAll(RegExp(r'\s'), '');
       if (!provedIdentity) {
         request.response.statusCode = 403;
+        await request.response.close();
+        return;
+      }
+      if (request.uri.path == '/pairing/request') {
+        pairingDisplayRequests++;
+        expect(request.method, 'POST');
+        request.response.statusCode = pairingDisplayStatus;
         await request.response.close();
         return;
       }
@@ -134,6 +166,106 @@ void main() {
     await server.close(force: true);
   });
 
+  test('pairing display is pinned and does not enroll or connect', () async {
+    final target = DiscoveredServer(
+      fingerprint,
+      Uri.parse('wss://127.0.0.1:${server.port}/ws'),
+    );
+    expect(await peer.requestPairingDisplay(target), isTrue);
+    expect(pairingDisplayRequests, 1);
+    expect(peer.state, PeerState.disconnected);
+    expect(peer.computers.computers, isEmpty);
+    expect(
+      await peer.requestPairingDisplay(
+        DiscoveredServer(List.filled(64, '0').join(), target.address),
+      ),
+      isFalse,
+    );
+    expect(pairingDisplayRequests, 1);
+  });
+
+  test('older servers retain manual pairing fallback', () async {
+    pairingDisplayStatus = 404;
+    expect(
+      await peer.requestPairingDisplay(
+        DiscoveredServer(
+          fingerprint,
+          Uri.parse('wss://127.0.0.1:${server.port}/ws'),
+        ),
+      ),
+      isFalse,
+    );
+    expect(peer.state, PeerState.disconnected);
+  });
+
+  test(
+    'paired server is rediscovered and only its verified address is saved',
+    () async {
+      peer.dispose();
+      final browser = FakeDiscovery();
+      peer = PeerClient(
+        discovery: browser,
+        timing: const PeerTiming(
+          connectTimeout: Duration(milliseconds: 250),
+          retryBase: Duration(milliseconds: 10),
+          retryMax: Duration(milliseconds: 20),
+        ),
+      );
+      final old = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final oldAddress = 'wss://127.0.0.1:${old.port}/ws';
+      await old.close();
+      await peer.computers.saveVerified(oldAddress, fingerprint);
+      await peer.computers.rename(fingerprint, 'My Linux');
+      final target = Uri.parse('wss://127.0.0.1:${server.port}/ws');
+      browser.candidates = [DiscoveredServer(fingerprint, target)];
+      await peer.connect(oldAddress, fingerprint, '', () {});
+      await waitFor(
+        peer,
+        () =>
+            peer.connected &&
+            peer.computers.find(fingerprint)?.address == target.toString(),
+      );
+      expect(browser.searches, greaterThan(0));
+      expect(peer.computers.find(fingerprint)?.name, 'My Linux');
+      expect(received.first['type'], 'hello');
+      expect(received.first.containsKey('token'), isFalse);
+    },
+  );
+
+  test(
+    'late discovery after disconnect cannot reconnect or update address',
+    () async {
+      peer.dispose();
+      final browser = FakeDiscovery();
+      final pending = Completer<List<DiscoveredServer>>();
+      browser.pending = pending.future;
+      peer = PeerClient(
+        discovery: browser,
+        timing: const PeerTiming(
+          connectTimeout: Duration(milliseconds: 100),
+          retryBase: Duration(milliseconds: 10),
+        ),
+      );
+      final old = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final address = 'wss://127.0.0.1:${old.port}/ws';
+      await old.close();
+      await peer.computers.saveVerified(address, fingerprint);
+      await peer.connect(address, fingerprint, '', () {});
+      await waitFor(peer, () => browser.searches > 0);
+      peer.disconnect();
+      pending.complete([
+        DiscoveredServer(
+          fingerprint,
+          Uri.parse('wss://127.0.0.1:${server.port}/ws'),
+        ),
+      ]);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(peer.state, PeerState.disconnected);
+      expect(received, isEmpty);
+      expect(peer.computers.find(fingerprint)?.address, address);
+    },
+  );
+
   test(
     'standalone Super requires explicit server capability and resets on reconnect',
     () async {
@@ -169,21 +301,7 @@ void main() {
   test(
     'switching between verified computers closes the old drag and preserves both pairings',
     () async {
-      capabilities = ['pointer.v1', 'drag.v1'];
-      await peer.connect(
-        'wss://127.0.0.1:${server.port}/ws',
-        fingerprint,
-        'first-secret',
-        () {},
-      );
-      await waitFor(
-        peer,
-        () => peer.ready && peer.computers.find(fingerprint) != null,
-      );
-      await peer.computers.rename(fingerprint, 'Linux PC');
-      peer.startDrag();
-      await waitFor(peer, () => received.any((m) => m['action'] == 'start'));
-      final firstSocket = sockets.first;
+      // Prepare expensive certificate material before a live drag/ACK timer.
       final other = jsonDecode(generateIdentity()) as Map<String, dynamic>;
       final cert = other['cert'] as String;
       final der = base64Decode(
@@ -205,6 +323,21 @@ void main() {
         context,
         requestClientCertificate: true,
       );
+      capabilities = ['pointer.v1', 'drag.v1'];
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        'first-secret',
+        () {},
+      );
+      await waitFor(
+        peer,
+        () => peer.ready && peer.computers.find(fingerprint) != null,
+      );
+      await peer.computers.rename(fingerprint, 'Linux PC');
+      peer.startDrag();
+      await waitFor(peer, () => received.any((m) => m['action'] == 'start'));
+      final firstSocket = sockets.first;
       final otherSockets = <WebSocket>[],
           otherMessages = <Map<String, dynamic>>[];
       otherServer.listen((request) async {
@@ -1338,4 +1471,151 @@ void main() {
     await waitFor(peer, () => sockets.length == 2 && peer.ready);
     expect(received.every((message) => message['type'] == 'hello'), isTrue);
   });
+  test(
+    'old IP with a different certificate does not block pinned rediscovery',
+    () async {
+      final other = jsonDecode(generateIdentity()) as Map<String, dynamic>;
+      final tls = SecurityContext(withTrustedRoots: false)
+        ..useCertificateChainBytes(utf8.encode(other['cert'] as String))
+        ..usePrivateKeyBytes(utf8.encode(other['key'] as String));
+      final wrong = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        0,
+        tls,
+      );
+      wrong.listen((request) {
+        request.response.statusCode = 404;
+        request.response.close();
+      }, onError: (Object _) {});
+      addTearDown(() => wrong.close(force: true));
+      peer.dispose();
+      final discovery = FakeDiscovery();
+      peer = PeerClient(
+        discovery: discovery,
+        timing: const PeerTiming(
+          connectTimeout: Duration(milliseconds: 300),
+          retryBase: Duration(milliseconds: 10),
+        ),
+      );
+      final oldAddress = 'wss://127.0.0.1:${wrong.port}/ws';
+      await peer.computers.saveVerified(oldAddress, fingerprint);
+      discovery.candidates = [
+        DiscoveredServer(
+          fingerprint,
+          Uri.parse('wss://127.0.0.1:${server.port}/ws'),
+        ),
+      ];
+      await peer.connect(oldAddress, fingerprint, '', () {});
+      await waitFor(peer, () => peer.connected);
+      expect(provedIdentity, isTrue);
+      expect(peer.computers.find(fingerprint)?.fingerprint, fingerprint);
+    },
+  );
+
+  test(
+    'forged discovery candidate cannot change trust and valid candidate still connects',
+    () async {
+      final other = jsonDecode(generateIdentity()) as Map<String, dynamic>;
+      final tls = SecurityContext(withTrustedRoots: false)
+        ..useCertificateChainBytes(utf8.encode(other['cert'] as String))
+        ..usePrivateKeyBytes(utf8.encode(other['key'] as String));
+      final wrong = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        0,
+        tls,
+      );
+      wrong.listen((request) {
+        request.response.statusCode = 404;
+        request.response.close();
+      }, onError: (Object _) {});
+      addTearDown(() => wrong.close(force: true));
+      peer.dispose();
+      final discovery = FakeDiscovery();
+      peer = PeerClient(
+        discovery: discovery,
+        timing: const PeerTiming(
+          connectTimeout: Duration(milliseconds: 300),
+          retryBase: Duration(milliseconds: 10),
+        ),
+      );
+      final unused = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final address = 'wss://127.0.0.1:${unused.port}/ws';
+      await unused.close();
+      await peer.computers.saveVerified(address, fingerprint);
+      final real = Uri.parse('wss://127.0.0.1:${server.port}/ws');
+      discovery.candidates = [
+        DiscoveredServer(
+          fingerprint,
+          Uri.parse('wss://127.0.0.1:${wrong.port}/ws'),
+        ),
+        DiscoveredServer(fingerprint, real),
+      ];
+      await peer.connect(address, fingerprint, '', () {});
+      await waitFor(
+        peer,
+        () =>
+            peer.connected &&
+            peer.computers.find(fingerprint)?.address == real.toString(),
+      );
+      expect(peer.computers.find(fingerprint)?.fingerprint, fingerprint);
+    },
+  );
+
+  test('forget during discovery cannot resurrect the computer', () async {
+    peer.dispose();
+    final discovery = FakeDiscovery();
+    final pending = Completer<List<DiscoveredServer>>();
+    discovery.pending = pending.future;
+    peer = PeerClient(
+      discovery: discovery,
+      timing: const PeerTiming(connectTimeout: Duration(milliseconds: 100)),
+    );
+    final unused = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final address = 'wss://127.0.0.1:${unused.port}/ws';
+    await unused.close();
+    await peer.computers.saveVerified(address, fingerprint);
+    await peer.connect(address, fingerprint, '', () {});
+    await waitFor(peer, () => discovery.searches > 0);
+    await peer.computers.forget(fingerprint);
+    pending.complete([
+      DiscoveredServer(
+        fingerprint,
+        Uri.parse('wss://127.0.0.1:${server.port}/ws'),
+      ),
+    ]);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(peer.state, PeerState.disconnected);
+    expect(peer.computers.find(fingerprint), isNull);
+    expect(received, isEmpty);
+  });
+  test(
+    'saved computer selected while backgrounded is rediscovered on resume',
+    () async {
+      peer.dispose();
+      final discovery = FakeDiscovery();
+      peer = PeerClient(
+        discovery: discovery,
+        timing: const PeerTiming(
+          connectTimeout: Duration(milliseconds: 100),
+          retryBase: Duration(milliseconds: 10),
+          retryMax: Duration(milliseconds: 20),
+        ),
+      );
+      final unused = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final address = 'wss://127.0.0.1:${unused.port}/ws';
+      await unused.close();
+      await peer.computers.saveVerified(address, fingerprint);
+      discovery.candidates = [
+        DiscoveredServer(
+          fingerprint,
+          Uri.parse('wss://127.0.0.1:${server.port}/ws'),
+        ),
+      ];
+      peer.setForeground(false);
+      await peer.connect(address, fingerprint, '', () {});
+      peer.setForeground(true);
+      await waitFor(peer, () => peer.connected);
+      expect(discovery.searches, greaterThan(0));
+    },
+  );
 }

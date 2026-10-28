@@ -5,10 +5,19 @@ import 'package:linkpad_controller/computer_store.dart';
 import 'package:linkpad_controller/controller_page.dart';
 import 'package:linkpad_controller/main.dart';
 import 'package:linkpad_controller/peer_client.dart';
+import 'package:linkpad_controller/server_discovery.dart';
+import 'nearby_computers_test.dart' show NearbyFixture;
 
 class ChooserPeer extends PeerClient {
   ChooserPeer(ComputerStore store) : super(computers: store);
   final attempts = <String>[];
+  final displayRequests = <String>[];
+  @override
+  Future<bool> requestPairingDisplay(DiscoveredServer server) async {
+    displayRequests.add(server.fingerprint);
+    return true;
+  }
+
   bool controls = false;
   @override
   bool get showControls => controls;
@@ -73,6 +82,58 @@ void main() {
     of: find.byKey(ValueKey(id)),
     matching: find.text('Connect'),
   );
+  testWidgets('nearby selection requires pairing and prefills manual details', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final fingerprint = List.filled(64, 'c').join();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ControllerPage(
+          peer: peer,
+          nearbyDiscovery: NearbyFixture([
+            DiscoveredServer(
+              fingerprint,
+              Uri.parse('wss://192.168.1.12:4747/ws'),
+            ),
+          ]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Pair'), 150);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Pair'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pair'));
+    await tester.pumpAndSettle();
+    expect(peer.attempts, isEmpty);
+    expect(store.find(fingerprint), isNull);
+    expect(peer.displayRequests, [fingerprint]);
+    await tester.tap(find.text('Enter manually'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Computer address'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Computer address'))
+          .controller!
+          .text,
+      'wss://192.168.1.12:4747/ws',
+    );
+    expect(peer.attempts, isEmpty);
+    expect(store.find(fingerprint), isNull);
+  });
+
+  testWidgets('computer chooser includes nearby discovery', (tester) async {
+    await pump(tester);
+    await tester.scrollUntilVisible(find.text('NEARBY COMPUTERS'), 200);
+    expect(find.text('NEARBY COMPUTERS'), findsOneWidget);
+  });
+
   testWidgets('chooser switches between computers without replacing pairings', (
     tester,
   ) async {

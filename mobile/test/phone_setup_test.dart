@@ -32,7 +32,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final pair = find.text('Pair a computer');
-      await tester.ensureVisible(pair);
+      await tester.scrollUntilVisible(pair, 150);
       await tester.tap(pair);
       await tester.pumpAndSettle();
       expect(find.text('Connect to a computer'), findsOneWidget);

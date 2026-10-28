@@ -50,17 +50,21 @@ func (p *Pairing) authorize(token string, save func() error) error {
 }
 
 type Node struct {
-	inputCount     atomic.Uint64
-	Trust          *Trust
-	Pairing        *Pairing
-	Plugins        plugins.Registry
-	execution      sync.Mutex
-	dragOwner      *websocket.Conn
-	dragTimer      *time.Timer
-	dragGeneration uint64
-	DragTimeout    time.Duration
-	management     sync.Mutex
-	sessions       map[*websocket.Conn]string
+	// RequestPairing queues display of a QR code; it never returns enrollment data.
+	RequestPairing     func() bool
+	pairingRequestMu   sync.Mutex
+	lastPairingRequest time.Time
+	inputCount         atomic.Uint64
+	Trust              *Trust
+	Pairing            *Pairing
+	Plugins            plugins.Registry
+	execution          sync.Mutex
+	dragOwner          *websocket.Conn
+	dragTimer          *time.Timer
+	dragGeneration     uint64
+	DragTimeout        time.Duration
+	management         sync.Mutex
+	sessions           map[*websocket.Conn]string
 }
 
 // InputCount counts successful remote actions without retaining their contents.
@@ -72,6 +76,7 @@ func (n *Node) TLS(cert tls.Certificate) *tls.Config {
 func (n *Node) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", n.handle)
+	mux.HandleFunc("/pairing/request", n.handlePairingRequest)
 	return mux
 }
 func (n *Node) handle(w http.ResponseWriter, r *http.Request) {

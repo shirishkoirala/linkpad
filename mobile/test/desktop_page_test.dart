@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:linkpad_controller/desktop/desktop_page.dart';
 import 'package:linkpad_controller/desktop/server_controller.dart';
 import 'package:linkpad_controller/main.dart';
@@ -55,6 +56,30 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'requested QR scrolls into view even from the bottom of the page',
+    (tester) async {
+      final server = FakeServer()
+        ..running = true
+        ..inputAvailable = true
+        ..address = 'wss://192.168.1.202:4747/ws';
+      server.peers = List.generate(
+        20,
+        (i) => DesktopPeer(i.toString().padLeft(64, 'a'), false),
+      );
+      addTearDown(server.dispose);
+      await show(tester, server, const Size(720, 580));
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(0, -2000),
+      );
+      await tester.pumpAndSettle();
+      await server.command('pair');
+      await tester.pumpAndSettle();
+      expect(find.byType(QrImageView).hitTestable(), findsOneWidget);
+    },
+  );
 
   testWidgets('pairing is explicit, cancellable, and fits the minimum window', (
     tester,

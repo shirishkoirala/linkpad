@@ -14,7 +14,7 @@ output = repo / 'bin/linux-container-test'
 output.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='linkpad-linux-context-') as temporary:
     context = Path(temporary)
-    for directory in ('cmd', 'internal', 'protocol/testdata', 'mobile/lib', 'mobile/test', 'mobile/assets', 'mobile/linux'):
+    for directory in ('cmd', 'internal', 'protocol/testdata', 'mobile/lib', 'mobile/test', 'mobile/assets', 'mobile/linux', 'mobile/third_party'):
         shutil.copytree(repo / directory, context / directory,
                         ignore=shutil.ignore_patterns('ephemeral', 'build', '.dart_tool', '.git'))
     for filename in ('go.mod', 'go.sum', 'mobile/.metadata', 'mobile/pubspec.yaml',

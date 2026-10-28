@@ -120,3 +120,19 @@ sha256sum -c linkpad_0.1.0_amd64.deb.sha256
 
 Use `shasum -a 256 -c FILE.sha256` for checksums on macOS. Install packages
 from trusted sources; the checksum detects corruption but is not a signature.
+
+## Local discovery and changed addresses
+
+Updated servers advertise `_linkpad._tcp` on the local network using only their
+public certificate fingerprint and listener port. Updated phones keep trying the
+saved address and can rediscover the same paired identity if DHCP changes its IP.
+The actual TLS certificate must still match before a new address is saved; no new
+pairing token is sent and saved computer names are preserved.
+
+The server refreshes advertisements when interface addresses change and withdraws
+them on shutdown. Discovery failure does not stop ordinary QR/manual connections.
+On iPhone, allow Linkpad under Settings > Privacy & Security > Local Network.
+Networks that isolate clients or block multicast may require scanning a fresh QR
+or updating the manual address; do not delete a pairing just because its IP changed.
+Old servers must be upgraded to advertise discovery. The update does not change
+router settings, and it does not provide remote/cloud discovery.

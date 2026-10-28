@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
+	"example.org/linkpad/internal/discovery"
 	"example.org/linkpad/internal/identity"
 	"example.org/linkpad/internal/node"
 	"example.org/linkpad/internal/pairingqr"
@@ -32,7 +34,8 @@ type desktopPeer struct {
 	Connected bool   `json:"connected"`
 }
 
-// runDesktop is a child process protocol, never a network management endpoint.
+// runDesktop keeps management on the private child-process pipe.
+// Its LAN endpoint can only request display of a local pairing QR.
 // EOF from the owning application shuts down the listener and all sessions.
 func runDesktop(state, listen, advertise string, allow bool) error {
 	cert, err := identity.Load(state)
@@ -57,12 +60,26 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 	} else {
 		inputError = "Desktop input is disabled"
 	}
-	n := &node.Node{Trust: trust, Plugins: registry}
+	pairingRequests := make(chan struct{}, 1)
+	n := &node.Node{Trust: trust, Plugins: registry, RequestPairing: func() bool {
+		select {
+		case pairingRequests <- struct{}{}:
+			return true
+		default:
+			return false
+		}
+	}}
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return fmt.Errorf("start server: %w", err)
 	}
 	defer listener.Close()
+	stopDiscovery, discoveryErr := discovery.Start(context.Background(), listener, identity.Fingerprint(cert.Certificate[0]), func(err error) { log.Printf("Discovery: %v", err) })
+	if discoveryErr != nil {
+		log.Printf("Discovery unavailable: %v", discoveryErr)
+	} else {
+		defer stopDiscovery()
+	}
 	defer n.DisconnectAll()
 	server := &http.Server{Handler: n.Handler(), TLSConfig: n.TLS(cert), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	serverErrors := make(chan error, 1)
@@ -90,7 +107,25 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 	address, addressErr := pairingqr.Address(listener.Addr().String(), advertise)
 	var invitation *pairingqr.Invitation
 	var pairing *node.Pairing
+	pairingDisplay := 0
 	encoder := json.NewEncoder(os.Stdout)
+	createPairing := func(chosen string) error {
+		if err := pairingqr.ValidateAddress(chosen); err != nil {
+			return err
+		}
+		next, err := node.NewPairing(2 * time.Minute)
+		if err != nil {
+			return err
+		}
+		invite, err := pairingqr.New(chosen, identity.Fingerprint(cert.Certificate[0]), next.Secret(), next.ExpiresAt())
+		if err != nil {
+			return err
+		}
+		n.SetPairing(next)
+		pairing = next
+		invitation = &invite
+		return nil
+	}
 	emit := func(request int, commandError string) error {
 		if !pairing.Active() {
 			invitation = nil
@@ -109,7 +144,7 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 		if allow && !trusted {
 			currentInputError = fmt.Sprint(pointer.AvailabilityError())
 		}
-		return encoder.Encode(map[string]any{"type": "status", "id": request, "running": true, "listen": listener.Addr().String(), "address": address, "addressError": addressError, "fingerprint": identity.Fingerprint(cert.Certificate[0]), "inputAvailable": len(registry) > 0 && trusted, "inputPermissionGranted": trusted, "inputCount": n.InputCount(), "inputError": currentInputError, "peers": peers, "pairing": invitation, "error": commandError})
+		return encoder.Encode(map[string]any{"type": "status", "id": request, "running": true, "listen": listener.Addr().String(), "address": address, "addressError": addressError, "fingerprint": identity.Fingerprint(cert.Certificate[0]), "inputAvailable": len(registry) > 0 && trusted, "inputPermissionGranted": trusted, "inputCount": n.InputCount(), "inputError": currentInputError, "peers": peers, "pairing": invitation, "pairingDisplay": pairingDisplay, "error": commandError})
 	}
 	if err := emit(0, ""); err != nil {
 		return err
@@ -125,6 +160,17 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 				return nil
 			}
 			return err
+		case <-pairingRequests:
+			pairingDisplay++
+			message := ""
+			if pairing == nil || !pairing.Active() {
+				if err := createPairing(address); err != nil {
+					message = err.Error()
+				}
+			}
+			if err := emit(0, message); err != nil {
+				return err
+			}
 		case <-ticker.C:
 			if err := emit(0, ""); err != nil {
 				return err
@@ -140,20 +186,7 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 				if command.Address != "" {
 					chosen = command.Address
 				}
-				commandErr = pairingqr.ValidateAddress(chosen)
-				if commandErr == nil {
-					var next *node.Pairing
-					next, commandErr = node.NewPairing(2 * time.Minute)
-					if commandErr == nil {
-						var invite pairingqr.Invitation
-						invite, commandErr = pairingqr.New(chosen, identity.Fingerprint(cert.Certificate[0]), next.Secret(), next.ExpiresAt())
-						if commandErr == nil {
-							n.SetPairing(next)
-							pairing = next
-							invitation = &invite
-						}
-					}
-				}
+				commandErr = createPairing(chosen)
 			case "cancelPairing":
 				n.SetPairing(nil)
 				pairing = nil

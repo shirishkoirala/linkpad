@@ -38,7 +38,10 @@ class MobileControlScaffold extends StatelessWidget {
             : inputReady
             ? 'Connected · Ready to control'
             : 'Input unavailable · Check desktop permissions',
-      PeerState.reconnecting => 'Reconnecting… · Controls paused',
+      PeerState.reconnecting =>
+        peer.findingComputer
+            ? 'Finding your computer…'
+            : 'Reconnecting… · Controls paused',
       PeerState.connecting => 'Connecting…',
       PeerState.disconnected => 'Disconnected · Select a computer',
       PeerState.suspended => 'Paused while app is inactive',
