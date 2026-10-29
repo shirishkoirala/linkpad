@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Keep the mark inside the adaptive icon's central safe area. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+    <path
+        android:fillColor="#C1E3A8"
+        android:fillType="evenOdd"
+        android:pathData="M38,26 H52 Q60,26 60,34 V44 H74 Q82,44 82,52 V66 Q82,74 74,74 H60 Q60,82 52,82 H38 Q30,82 30,74 V34 Q30,26 38,26 Z M38,32 Q36,32 36,34 V74 Q36,76 38,76 H52 Q54,76 54,74 H50 Q42,74 42,66 V52 Q42,44 50,44 H54 V34 Q54,32 52,32 Z M60,50 V68 H74 Q76,68 76,66 V52 Q76,50 74,50 Z M48,51 V67 Q48,68 49,67 L52,64 L56,72 H60 L56,62 L60,61 Q61,60 60,59 L49,50 Q48,49 48,51 Z" />
+    </group>
+</vector>
