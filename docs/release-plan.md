@@ -61,6 +61,7 @@ The initial macOS release uses direct distribution. Mac App Store sandbox compat
 
 ## 5. Prepare public listings and support
 
+- [ ] Complete the asset checklist below before submitting store listings.
 - [ ] Publish a privacy policy describing actual data handling.
 - [ ] Complete Google Play Data safety and Apple App Privacy disclosures.
 - [ ] Prepare icons, screenshots, descriptions and platform requirements.
@@ -68,6 +69,42 @@ The initial macOS release uses direct distribution. Mac App Store sandbox compat
 - [ ] Explain camera, local network and desktop input permission requests.
 - [ ] Provide Apple reviewers with desktop installation and pairing instructions.
 - [ ] Write release notes, including supported platforms and known limitations.
+
+### Release assets
+
+Keep editable source artwork and exported assets in a versioned release asset folder. Capture screenshots from the approved release candidate, using sample computer names and no real pairing secrets, QR codes, IP addresses or personal information. Confirm current store upload requirements in Play Console and App Store Connect before final export.
+
+| Destination | Assets to prepare |
+| --- | --- |
+| Shared branding | Approved logo master, light/dark variants, transparent exports, brand colors and a short app description |
+| Google Play | 512 × 512 store icon, 1024 × 500 feature graphic and phone screenshots; additional device assets only for supported form factors |
+| Android app | Adaptive foreground/background layers, monochrome themed icon and legacy launcher icons; verify circular and rounded-square masks |
+| iOS App Store | 1024 × 1024 opaque app icon and screenshots for the supported device categories and sizes requested by App Store Connect |
+| macOS download | App icon, DMG presentation artwork, desktop setup screenshot and Accessibility permission walkthrough |
+| Linux and Windows downloads | Platform app/installer icons, desktop screenshots and illustrated installation instructions |
+| Website and GitHub | Logo, social preview image, mobile/desktop overview images, download badges and support illustrations |
+
+Screenshot storyboard:
+
+1. Touchpad: demonstrate mouse control and scrolling.
+2. Remote: show D-pad, Enter and volume controls.
+3. Keyboard: show text input and modifier keys.
+4. Computers: show discovery and saved computers using sample data.
+5. Setup: explain desktop installation and secure QR pairing using nonfunctional illustrative content.
+
+Asset completion checks:
+
+- [ ] Approve the final logo and verify icon legibility at small sizes on each platform.
+- [ ] Capture clean Android and iOS screenshots independently so system UI matches the platform.
+- [ ] Capture current desktop screenshots for Windows, macOS and Linux.
+- [ ] Export store artwork at the required dimensions and file formats.
+- [ ] Write concise screenshot captions that accurately describe shipped features.
+- [ ] Check typography, contrast, cropping, safe areas and consistency across exports.
+- [ ] Confirm that all artwork, fonts and imagery have appropriate usage rights.
+- [ ] Record which release candidate the screenshots represent; refresh them if visible UI changes.
+- [ ] Review assets in the actual store listing previews before submission.
+
+Store preview videos are optional for v0.1.0 and can follow after launch.
 
 ## 6. Publish
 
