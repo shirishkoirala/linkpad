@@ -153,17 +153,16 @@ class BonjourServerDiscovery implements ServerDiscovery {
       }
       if (!active() || revisions[id] != revision) return;
       records[id] = [
-        for (final ip in addresses.take(8))
-          if (_lanAddress(ip))
-            DiscoveredServer(
-              attrs['fp']!,
-              Uri(
-                scheme: 'wss',
-                host: ip.address,
-                port: service.port,
-                path: '/ws',
-              ),
+        for (final ip in addresses.where(_lanAddress).take(8))
+          DiscoveredServer(
+            attrs['fp']!,
+            Uri(
+              scheme: 'wss',
+              host: ip.address,
+              port: service.port,
+              path: '/ws',
             ),
+          ),
       ];
     }
 

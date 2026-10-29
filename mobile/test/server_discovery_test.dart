@@ -44,6 +44,36 @@ void main() {
     port: port,
     attributes: {'v': '1', 'fp': fingerprint ?? pin},
   );
+  for (final mode in ['saved', 'nearby']) {
+    test(
+      '$mode discovery keeps LAN addresses after many unusable IPv6 results',
+      () async {
+        final session = FakeSession();
+        final browser = BonjourServerDiscovery(
+          sessionFactory: () => session,
+          lookup: (_) async => [
+            for (var i = 1; i <= 11; i++) InternetAddress('fe80::$i'),
+            InternetAddress('192.168.1.116'),
+          ],
+        );
+        final result = mode == 'saved'
+            ? browser.find(pin, timeout: const Duration(milliseconds: 80))
+            : browser.browse(timeout: const Duration(milliseconds: 80));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        session.controller.add(
+          BonsoirDiscoveryServiceResolvedEvent(
+            service: service(host: 'computer.local.'),
+          ),
+        );
+        final found = await result;
+        expect(found.map((s) => s.address.toString()).toList(), [
+          'wss://192.168.1.116:4747/ws',
+        ]);
+        await session.controller.close();
+      },
+    );
+  }
+
   test(
     'browse counts computers rather than addresses toward its result limit',
     () async {

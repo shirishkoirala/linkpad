@@ -9,10 +9,45 @@ import 'package:linkpad_controller/relative_touchpad.dart';
 import 'control_deck_test.dart' show FakePeer;
 
 void main() {
-  testWidgets('older servers retain tap-to-latch Super shortcuts', (
-    tester,
-  ) async {
-    final peer = FakePeer()..standaloneSuper = false;
+  testWidgets(
+    'Remote has volume controls instead of modifiers and keeps Keyboard shortcuts',
+    (tester) async {
+      final peer = FakePeer(), settings = CursorSettings();
+      addTearDown(peer.dispose);
+      addTearDown(settings.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: linkpadTheme(Brightness.light),
+          home: ControlDeck(peer: peer, settings: settings),
+        ),
+      );
+      await tester.tap(find.text('Remote'));
+      await tester.pumpAndSettle();
+      for (final label in ['Ctrl', 'Alt', 'Shift', 'Win / Cmd']) {
+        expect(find.text(label), findsNothing);
+      }
+      for (final icon in [
+        Icons.volume_down_outlined,
+        Icons.volume_off_outlined,
+        Icons.volume_up_outlined,
+      ]) {
+        await tester.ensureVisible(find.byIcon(icon));
+        await tester.tap(find.byIcon(icon));
+        await tester.pump();
+      }
+      expect(peer.volumeActions, ['down', 'mute', 'up']);
+      expect(peer.keys, isEmpty);
+      await tester.tap(find.text('Keyboard'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Win / Cmd'));
+      expect(find.text('Ctrl'), findsOneWidget);
+      expect(find.text('Alt'), findsOneWidget);
+      expect(find.text('Win / Cmd'), findsOneWidget);
+    },
+  );
+
+  testWidgets('volume buttons stay disabled for old servers', (tester) async {
+    final peer = FakePeer()..volumeSupported = false;
     addTearDown(peer.dispose);
     await tester.pumpWidget(
       MaterialApp(
@@ -20,25 +55,120 @@ void main() {
         home: RemotePage(peer: peer, onSettings: () {}),
       ),
     );
-    await tester.ensureVisible(find.text('Win / Cmd'));
-    await tester.tap(find.text('Win / Cmd'));
+    final mute = find.byIcon(Icons.volume_off_outlined);
+    await tester.ensureVisible(mute);
+    await tester.tap(mute);
     await tester.pump();
-    expect(peer.keys, isEmpty);
-    await tester.ensureVisible(find.byIcon(Icons.keyboard_arrow_left));
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_left));
-    await tester.pump();
-    expect(peer.keys.last.key, 'left');
-    expect(peer.keys.last.modifiers, {'super'});
+    expect(peer.volumeActions, isEmpty);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Win Command tap sends standalone and hold prepares a shortcut', (
+  testWidgets(
+    'Pro Max gives spare Remote height to touchpad and keeps controls compact',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final peer = FakePeer();
+      addTearDown(peer.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: linkpadTheme(Brightness.light),
+          home: RemotePage(peer: peer, onSettings: () {}),
+        ),
+      );
+      final touchpad = find.byKey(const ValueKey('remote-touchpad'));
+      final ring = find.byWidgetPredicate(
+        (w) =>
+            w is Semantics && (w.properties.label ?? '').startsWith('D-pad.'),
+      );
+      expect(tester.getSize(touchpad).height, greaterThan(260));
+      expect(tester.getSize(ring).width, lessThanOrEqualTo(220));
+      final escape = find.widgetWithText(TextButton, 'Esc');
+      expect(tester.getSize(escape).width, greaterThanOrEqualTo(56));
+      expect(tester.getSize(escape).height, greaterThanOrEqualTo(56));
+      final shortcuts = find.widgetWithText(FilledButton, 'Previous');
+      expect(
+        tester.getTopLeft(shortcuts).dy - tester.getBottomLeft(ring).dy,
+        lessThanOrEqualTo(20),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'D-pad arrows fill ring sectors and exclude center and outer corners',
+    (tester) async {
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final peer = FakePeer();
+      addTearDown(peer.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: linkpadTheme(Brightness.light),
+          home: RemotePage(peer: peer, onSettings: () {}),
+        ),
+      );
+      final ring = find.byWidgetPredicate(
+        (w) =>
+            w is Semantics && (w.properties.label ?? '').startsWith('D-pad.'),
+      );
+      await tester.scrollUntilVisible(
+        find.byIcon(Icons.keyboard_arrow_up),
+        150,
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(ring);
+      await tester.pumpAndSettle();
+      final center = tester.getCenter(ring);
+      final diameter = tester.getSize(ring).width;
+      final points = <String, Offset>{
+        'up': const Offset(.22, -.34),
+        'right': const Offset(.34, .22),
+        'down': const Offset(-.22, .34),
+        'left': const Offset(-.34, -.22),
+      };
+      for (final entry in points.entries) {
+        final count = peer.keys.length;
+        await tester.tapAt(center + entry.value * diameter);
+        await tester.pump();
+        expect(peer.keys.length, count + 1, reason: entry.key);
+        expect(peer.keys.last.key, entry.key);
+      }
+      await tester.tapAt(center + Offset(diameter * .14, diameter * .16));
+      await tester.pump();
+      expect(
+        peer.keys.last.key,
+        'down',
+        reason: 'Enter must not steal touches outside its circle',
+      );
+      final count = peer.keys.length;
+      await tester.tapAt(center + Offset(diameter * .46, diameter * .46));
+      await tester.pump();
+      expect(peer.keys.length, count);
+      await tester.tapAt(center);
+      await tester.pump();
+      expect(peer.keys.length, count + 1);
+      expect(peer.keys.last.key, 'enter');
+      final hold = await tester.startGesture(center + points['up']! * diameter);
+      await tester.pump(const Duration(milliseconds: 750));
+      expect(peer.keys.last.key, 'up');
+      expect(peer.keys.length, greaterThan(count + 2));
+      await hold.up();
+      final stopped = peer.keys.length;
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(peer.keys.length, stopped);
+    },
+  );
+
+  testWidgets('older servers retain tap-to-latch Super shortcuts in Keyboard', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(393, 852);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final peer = FakePeer(), settings = CursorSettings();
+    final peer = FakePeer()..standaloneSuper = false;
+    final settings = CursorSettings();
     addTearDown(peer.dispose);
     addTearDown(settings.dispose);
     await tester.pumpWidget(
@@ -47,39 +177,47 @@ void main() {
         home: ControlDeck(peer: peer, settings: settings),
       ),
     );
-    await tester.tap(find.text('Remote'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Win / Cmd'));
-    await tester.pump();
-    expect(peer.keys.last.key, 'super');
-    expect(peer.keys.last.modifiers, isEmpty);
-    final count = peer.keys.length;
-    await tester.longPress(find.text('Win / Cmd'));
-    await tester.pump();
-    await tester.tap(find.text('Win / Cmd'));
-    await tester.pump();
-    expect(peer.keys.length, count);
-    await tester.longPress(find.text('Win / Cmd'));
-    await tester.pump();
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_left));
-    await tester.pump();
-    expect(peer.keys.last.key, 'left');
-    expect(peer.keys.last.modifiers, {'super'});
     await tester.tap(find.text('Keyboard'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Win / Cmd'));
     await tester.tap(find.text('Win / Cmd'));
     await tester.pump();
-    expect(peer.keys.last.key, 'super');
-    expect(peer.keys.last.modifiers, isEmpty);
-    await tester.longPress(find.text('Win / Cmd'));
+    expect(peer.keys, isEmpty);
+    await tester.ensureVisible(find.text('a'));
+    await tester.tap(find.text('a'));
     await tester.pump();
-    await tester.ensureVisible(find.text('e'));
-    await tester.tap(find.text('e'));
-    await tester.pump();
-    expect(peer.keys.last.key, 'e');
+    expect(peer.keys.last.key, 'a');
     expect(peer.keys.last.modifiers, {'super'});
   });
+
+  testWidgets(
+    'Keyboard Win Command tap sends standalone and hold prepares a shortcut',
+    (tester) async {
+      final peer = FakePeer(), settings = CursorSettings();
+      addTearDown(peer.dispose);
+      addTearDown(settings.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: linkpadTheme(Brightness.light),
+          home: ControlDeck(peer: peer, settings: settings),
+        ),
+      );
+      await tester.tap(find.text('Keyboard'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Win / Cmd'));
+      await tester.tap(find.text('Win / Cmd'));
+      await tester.pump();
+      expect(peer.keys.last.key, 'super');
+      expect(peer.keys.last.modifiers, isEmpty);
+      await tester.longPress(find.text('Win / Cmd'));
+      await tester.pump();
+      await tester.ensureVisible(find.text('e'));
+      await tester.tap(find.text('e'));
+      await tester.pump();
+      expect(peer.keys.last.key, 'e');
+      expect(peer.keys.last.modifiers, {'super'});
+    },
+  );
 
   testWidgets('Remote touchpad uses sensitivity without scrolling the page', (
     tester,
@@ -213,7 +351,7 @@ void main() {
     },
   );
 
-  testWidgets('Remote sends Enter, arrow shortcuts and one-shot modifiers', (
+  testWidgets('Remote sends navigation without modifier controls', (
     tester,
   ) async {
     final peer = FakePeer(), settings = CursorSettings();
@@ -227,57 +365,60 @@ void main() {
     );
     await tester.tap(find.text('Remote'));
     await tester.pumpAndSettle();
-    expect(find.byType(RemotePage), findsOneWidget);
     await tester.ensureVisible(find.text('Enter'));
     await tester.tap(find.text('Enter'));
     await tester.pump();
     expect(peer.keys.last.key, 'enter');
-    await tester.ensureVisible(find.text('Win / Cmd'));
-    await tester.longPress(find.text('Win / Cmd'));
-    await tester.pump();
+    expect(peer.keys.last.modifiers, isEmpty);
     await tester.ensureVisible(find.byIcon(Icons.keyboard_arrow_left));
     await tester.tap(find.byIcon(Icons.keyboard_arrow_left));
     await tester.pump();
     expect(peer.keys.last.key, 'left');
-    expect(peer.keys.last.modifiers, {'super'});
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_right));
-    await tester.pump();
     expect(peer.keys.last.modifiers, isEmpty);
     await tester.ensureVisible(find.text('Previous'));
     await tester.tap(find.text('Previous'));
     await tester.pump();
     expect(peer.keys.last.key, 'tab');
     expect(peer.keys.last.modifiers, {'shift'});
-    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Remote carries a Windows or Command modifier to the keyboard', (
-    tester,
-  ) async {
-    final peer = FakePeer(), settings = CursorSettings();
-    addTearDown(peer.dispose);
-    addTearDown(settings.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: linkpadTheme(Brightness.light),
-        home: ControlDeck(peer: peer, settings: settings),
-      ),
-    );
-    await tester.tap(find.text('Remote'));
-    await tester.pumpAndSettle();
-    await tester.longPress(find.text('Win / Cmd'));
-    await tester.pump();
-    await tester.tap(find.text('Keyboard'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('c'));
-    await tester.tap(find.text('c'));
-    await tester.pump();
-    expect(peer.keys.last.key, 'c');
-    expect(peer.keys.last.modifiers, {'super'});
-    await tester.tap(find.text('v'));
-    await tester.pump();
-    expect(peer.typed, ['v']);
-  });
+  testWidgets(
+    'volume hold repeats, mute stays single-shot, and disconnect cancels repeats',
+    (tester) async {
+      final peer = FakePeer();
+      addTearDown(peer.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: linkpadTheme(Brightness.light),
+          home: RemotePage(peer: peer, onSettings: () {}),
+        ),
+      );
+      final up = find.byIcon(Icons.volume_up_outlined);
+      await tester.ensureVisible(up);
+      final hold = await tester.startGesture(tester.getCenter(up));
+      await tester.pump(const Duration(milliseconds: 750));
+      expect(peer.volumeActions.length, greaterThan(1));
+      expect(peer.volumeActions.every((a) => a == 'up'), isTrue);
+      peer.pause();
+      await tester.pump();
+      final stopped = peer.volumeActions.length;
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(peer.volumeActions.length, stopped);
+      await hold.up();
+      peer.resume();
+      await tester.pump();
+      final mute = find.byIcon(Icons.volume_off_outlined);
+      await tester.ensureVisible(mute);
+      await tester.longPress(mute);
+      await tester.pump();
+      final muteHeld = peer.volumeActions.where((a) => a == 'mute').length;
+      // A long hold may show the tooltip, but must never repeat Mute.
+      expect(muteHeld, lessThanOrEqualTo(1));
+      await tester.tap(mute);
+      await tester.pump();
+      expect(peer.volumeActions.where((a) => a == 'mute').length, muteHeld + 1);
+    },
+  );
 
   testWidgets('holding an arrow repeats until release or connection loss', (
     tester,

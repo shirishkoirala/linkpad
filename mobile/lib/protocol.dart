@@ -6,6 +6,7 @@ const scrollCapability = 'scroll.v1';
 const keyCapability = 'key.v1';
 const keyboardCapability = 'keyboard.v1';
 const superKeyCapability = 'keyboard.super.v1';
+const volumeCapability = 'media.volume.v1';
 
 List<String> readyCapabilities(Map<String, dynamic> message) {
   // The Go desktop omits this field when no capabilities are available.
@@ -27,6 +28,7 @@ String hello(String token) => jsonEncode({
     keyCapability,
     keyboardCapability,
     superKeyCapability,
+    volumeCapability,
     dragCapability,
   ],
 });
@@ -84,4 +86,11 @@ Uri peerAddress(String address) {
     throw const FormatException('Use wss://HOST:4747/ws');
   }
   return uri;
+}
+
+String volumeMessage(String action) {
+  if (!const {'up', 'down', 'mute'}.contains(action)) {
+    throw ArgumentError('Invalid volume action');
+  }
+  return jsonEncode({'version': 1, 'type': 'volume', 'action': action});
 }

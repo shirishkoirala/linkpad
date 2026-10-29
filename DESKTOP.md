@@ -202,3 +202,21 @@ or verify the fingerprint and enter its secret manually to pair.
 
 Both apps need this update. Older desktops and headless servers retain manual
 QR creation. The request does not start a stopped server or wake a sleeping PC.
+
+### Remote volume controls
+
+Remote has Volume down, Mute, and Volume up instead of modifier buttons. Keyboard
+retains Ctrl, Alt, Shift, and Win/Command. Both phone and server need this update;
+older servers leave the volume row disabled. These buttons send system media keys
+on macOS and Linux X11, using the desktop’s normal volume steps and mute toggle.
+
+Hold Volume up/down to repeat; release or disconnect stops repeats. Repeats skip
+busy connections so they do not queue a delayed audio burst. Mute is single-shot.
+
+### Applying Accessibility changes on macOS
+
+If Accessibility is enabled but input remains unavailable, return to Linkpad and
+choose **Check access**. A restart prompt offers **Restart Linkpad** when a fresh
+application process may be needed. The action closes the old server before
+reopening the app, preserving pairings and allowing phones to reconnect. If the
+relaunch fails, Linkpad restores its server and offers manual recovery.

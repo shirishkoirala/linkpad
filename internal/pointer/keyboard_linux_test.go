@@ -32,3 +32,19 @@ func TestStandaloneSuperMapping(t *testing.T) {
 		t.Fatalf("unexpected standalone Super strokes: %#v", strokes)
 	}
 }
+
+func TestVolumeKeyMapping(t *testing.T) {
+	mapping := []xproto.Keysym{0x1008ff11, 0, 0x1008ff12, 0, 0x1008ff13, 0}
+	for _, test := range []struct {
+		key  string
+		code byte
+	}{{"volumedown", 122}, {"mute", 123}, {"volumeup", 124}} {
+		strokes, err := keyboardStrokes(mapping, 2, 122, test.key, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(strokes) != 1 || strokes[0].code != test.code || len(strokes[0].mods) != 0 {
+			t.Fatalf("%s: %+v", test.key, strokes)
+		}
+	}
+}

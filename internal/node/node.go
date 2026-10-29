@@ -187,6 +187,9 @@ func (n *Node) handle(w http.ResponseWriter, r *http.Request) {
 				capability = protocol.SuperKey
 			}
 			err = m.ValidateKeyboard()
+		case "volume":
+			capability = protocol.Volume
+			err = m.ValidateVolume()
 		case "drag":
 			capability = protocol.Drag
 			err = m.ValidateDrag()

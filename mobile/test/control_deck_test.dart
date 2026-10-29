@@ -12,6 +12,19 @@ class FakePeer extends PeerClient {
   }
   final typed = <String>[];
   final keys = <({String key, Set<String> modifiers})>[];
+  final volumeActions = <String>[];
+  bool volumeSupported = true;
+  @override
+  bool get supportsVolume => volumeSupported;
+  @override
+  bool get canVolume => available && volumeSupported;
+  @override
+  bool volume(String action, {bool repeat = false}) {
+    if (!canVolume) return false;
+    volumeActions.add(action);
+    return true;
+  }
+
   bool available = true;
   bool standaloneSuper = true;
   bool responsePaused = false;

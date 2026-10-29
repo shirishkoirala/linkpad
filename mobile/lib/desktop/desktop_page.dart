@@ -1,3 +1,4 @@
+import 'accessibility_restart_prompt.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -97,7 +98,10 @@ class _DesktopPageState extends State<DesktopPage> {
         return DesktopSetupPage(server: server, platform: widget.platform!);
       }
       final colors = Theme.of(context).colorScheme;
-      final busy = server.busy || _commandBusy;
+      final busy =
+          server.busy ||
+          _commandBusy ||
+          (widget.platform?.restartBusy ?? false);
       return Scaffold(
         body: SafeArea(
           child: SingleChildScrollView(
@@ -505,6 +509,11 @@ class _DesktopPageState extends State<DesktopPage> {
                 ),
               ],
             ),
+            if (platform != null)
+              AccessibilityRestartPrompt(
+                platform: platform,
+                busy: server.busy || _commandBusy,
+              ),
             const Divider(height: 32),
           ],
           if (platform != null &&

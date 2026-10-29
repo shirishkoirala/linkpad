@@ -25,3 +25,7 @@ func native(dx, dy int, button string) error {
 func nativeKey(key string) error {
 	return fmt.Errorf("key backend unavailable on this platform/build")
 }
+
+func nativeVolume(action string) error {
+	return fmt.Errorf("volume backend unavailable on this platform/build")
+}

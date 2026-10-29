@@ -1,3 +1,4 @@
+import 'dpad_sector.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -25,58 +26,25 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage> {
-  final modifiers = <String>{};
   PeerClient get peer => widget.peer;
   bool get arrowsEnabled => peer.canKey || peer.canKeyboard;
-  static const labels = {
-    'ctrl': 'Ctrl',
-    'alt': 'Alt',
-    'shift': 'Shift',
-    'super': 'Win / Command',
-  };
-
-  void _toggleSuper() => setState(() {
-    modifiers.contains('super')
-        ? modifiers.remove('super')
-        : modifiers.add('super');
-  });
-
-  void _tapSuper() {
-    if (modifiers.contains('super') || !peer.supportsStandaloneSuper) {
-      _toggleSuper();
-    } else {
-      peer.keyboardKey('super');
-    }
-  }
-
   void _send(String key, {Set<String> extra = const {}}) {
-    final mods = {...modifiers, ...extra};
-    bool sent;
     if (peer.canKeyboard) {
-      sent = peer.keyboardKey(key, modifiers: mods);
+      peer.keyboardKey(key, modifiers: extra);
     } else if (peer.canKey &&
-        mods.isEmpty &&
-        {'left', 'right', 'up', 'down'}.contains(key)) {
+        extra.isEmpty &&
+        const {'left', 'right', 'up', 'down'}.contains(key)) {
       peer.pressKey(key);
-      sent = true;
-    } else {
-      return;
-    }
-    if (sent) {
-      setState(() {
-        modifiers.clear();
-      });
     }
   }
 
   void _switchMode(String mode) =>
-      Navigator.pop(context, (mode: mode, modifiers: {...modifiers}));
+      Navigator.pop(context, (mode: mode, modifiers: <String>{}));
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: Listenable.merge([peer, widget.settings]),
     builder: (context, _) {
-      if (!peer.canKeyboard) modifiers.clear();
       final colors = Theme.of(context).colorScheme;
       return MobileControlScaffold(
         peer: peer,
@@ -94,36 +62,34 @@ class _RemotePageState extends State<RemotePage> {
             MobileControlNotice(peer: peer, keyboardRequired: true),
             Expanded(
               child: LayoutBuilder(
-                builder: (context, space) => SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: space.maxHeight),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: _touchpad(colors),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: _modifiers(colors),
-                          ),
-                          const SizedBox(height: 12),
-                          LayoutBuilder(
-                            builder: (context, size) =>
-                                _directionPad(size.maxWidth),
-                          ),
-                        ],
-                      ),
+                builder: (context, space) {
+                  final padHeight = _directionPadHeight(space.maxWidth);
+                  final touchpadHeight = math.max(
+                    200.0,
+                    space.maxHeight - padHeight - 72,
+                  );
+                  return SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: touchpadHeight,
+                          child: _touchpad(colors),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _volumeControls(),
+                        ),
+                        const SizedBox(height: 8),
+                        _directionPad(space.maxWidth),
+                        const SizedBox(height: 8),
+                      ],
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _shortcuts(),
           ],
         ),
@@ -161,45 +127,29 @@ class _RemotePageState extends State<RemotePage> {
     ),
   );
 
-  Widget _modifiers(ColorScheme colors) => Row(
+  Widget _volumeControls() => Row(
     children: [
-      for (final mod in ['ctrl', 'alt', 'shift', 'super'])
+      for (final control in [
+        ('down', Icons.volume_down_outlined, 'Volume down', 'Vol−'),
+        ('mute', Icons.volume_off_outlined, 'Mute', 'Mute'),
+        ('up', Icons.volume_up_outlined, 'Volume up', 'Vol+'),
+      ])
         Expanded(
-          flex: mod == 'super' ? 2 : 1,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: FilledButton.tonal(
-              onPressed: peer.canKeyboard
-                  ? mod == 'super'
-                        ? _tapSuper
-                        : () => setState(() {
-                            modifiers.contains(mod)
-                                ? modifiers.remove(mod)
-                                : modifiers.add(mod);
-                          })
-                  : null,
-              onLongPress: peer.canKeyboard && mod == 'super'
-                  ? _toggleSuper
-                  : null,
-              style: FilledButton.styleFrom(
+            child: Tooltip(
+              message: peer.supportsVolume
+                  ? control.$3
+                  : 'Update Linkpad on your computer for volume controls.',
+              child: _RemoteKey(
+                label: control.$3,
+                shortLabel: control.$4,
+                icon: control.$2,
+                enabled: peer.canVolume,
+                onPressed: () => peer.volume(control.$1),
+                onRepeat: () => peer.volume(control.$1, repeat: true),
+                repeat: control.$1 != 'mute',
                 minimumSize: const Size(0, 48),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                foregroundColor: modifiers.contains(mod)
-                    ? colors.onPrimary
-                    : colors.onSurface,
-                backgroundColor: modifiers.contains(mod)
-                    ? colors.primary
-                    : colors.surfaceContainerHighest,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: LinkpadStyle.keyRadius,
-                ),
-              ),
-              child: Semantics(
-                toggled: modifiers.contains(mod),
-                child: Text(
-                  mod == 'super' ? 'Win / Cmd' : labels[mod]!,
-                  style: const TextStyle(fontSize: 13),
-                ),
               ),
             ),
           ),
@@ -225,7 +175,7 @@ class _RemotePageState extends State<RemotePage> {
                     )
                   : null,
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 shape: const RoundedRectangleBorder(
                   borderRadius: LinkpadStyle.keyRadius,
                 ),
@@ -234,7 +184,7 @@ class _RemotePageState extends State<RemotePage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(shortcut.$1, size: 21),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 4),
                   Text(shortcut.$2, style: const TextStyle(fontSize: 12)),
                 ],
               ),
@@ -244,15 +194,17 @@ class _RemotePageState extends State<RemotePage> {
     ],
   );
 
+  double _directionPadHeight(double width) => (width - 128).clamp(156.0, 220.0);
+
   Widget _directionPad(double width) {
     final colors = Theme.of(context).colorScheme;
     return SizedBox(
-      height: (width - 102).clamp(178.0, 260.0),
+      height: _directionPadHeight(width),
       child: LayoutBuilder(
         builder: (context, space) {
           final diameter = math
-              .min(space.maxWidth - 102, space.maxHeight)
-              .clamp(140.0, 260.0);
+              .min(space.maxWidth - 128, space.maxHeight)
+              .clamp(140.0, 220.0);
           Widget side(String label, String key, IconData? icon) => _RemoteKey(
             label: label,
             icon: icon,
@@ -260,19 +212,27 @@ class _RemotePageState extends State<RemotePage> {
             onPressed: () => _send(key),
             repeat: true,
           );
-          Widget arrow(IconData icon, String key) => _RemoteKey(
-            label: 'Arrow $key',
-            icon: icon,
-            enabled: arrowsEnabled,
-            onPressed: () => _send(key),
-            repeat: true,
-            transparent: true,
-          );
+          Widget arrow(IconData icon, String key, Alignment alignment) =>
+              Positioned.fill(
+                child: DpadSector(
+                  direction: key,
+                  innerRadius: math.max(72.0, diameter * .36) / 2,
+                  child: _RemoteKey(
+                    label: 'Arrow $key',
+                    icon: icon,
+                    enabled: arrowsEnabled,
+                    onPressed: () => _send(key),
+                    repeat: true,
+                    transparent: true,
+                    alignment: alignment,
+                  ),
+                ),
+              );
           return Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               SizedBox(
-                width: 44,
+                width: 56,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -282,7 +242,7 @@ class _RemotePageState extends State<RemotePage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 8),
               Semantics(
                 label: 'D-pad. Arrow keys with Enter in the center.',
                 child: SizedBox(
@@ -297,60 +257,46 @@ class _RemotePageState extends State<RemotePage> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        Positioned(
-                          top: 4,
-                          left: diameter / 2 - 24,
-                          child: SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: arrow(Icons.keyboard_arrow_up, 'up'),
-                          ),
+                        arrow(
+                          Icons.keyboard_arrow_up,
+                          'up',
+                          const Alignment(0, -.8),
                         ),
-                        Positioned(
-                          bottom: 4,
-                          left: diameter / 2 - 24,
-                          child: SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: arrow(Icons.keyboard_arrow_down, 'down'),
-                          ),
+                        arrow(
+                          Icons.keyboard_arrow_right,
+                          'right',
+                          const Alignment(.8, 0),
                         ),
-                        Positioned(
-                          left: 4,
-                          top: diameter / 2 - 24,
-                          child: SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: arrow(Icons.keyboard_arrow_left, 'left'),
-                          ),
+                        arrow(
+                          Icons.keyboard_arrow_down,
+                          'down',
+                          const Alignment(0, .8),
                         ),
-                        Positioned(
-                          right: 4,
-                          top: diameter / 2 - 24,
-                          child: SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: arrow(Icons.keyboard_arrow_right, 'right'),
-                          ),
+                        arrow(
+                          Icons.keyboard_arrow_left,
+                          'left',
+                          const Alignment(-.8, 0),
                         ),
                         SizedBox(
                           width: math.max(72.0, diameter * .36),
                           height: math.max(72.0, diameter * .36),
-                          child: FilledButton(
-                            onPressed: peer.canKeyboard
-                                ? () => _send('enter')
-                                : null,
-                            style: FilledButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              shape: const CircleBorder(),
-                            ),
-                            child: const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.keyboard_return, size: 19),
-                                SizedBox(height: 4),
-                                Text('Enter', style: TextStyle(fontSize: 14)),
-                              ],
+                          child: ClipOval(
+                            child: FilledButton(
+                              onPressed: peer.canKeyboard
+                                  ? () => _send('enter')
+                                  : null,
+                              style: FilledButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                shape: const CircleBorder(),
+                              ),
+                              child: const Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.keyboard_return, size: 19),
+                                  SizedBox(height: 4),
+                                  Text('Enter', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -359,9 +305,9 @@ class _RemotePageState extends State<RemotePage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 8),
               SizedBox(
-                width: 44,
+                width: 56,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -391,10 +337,18 @@ class _RemoteKey extends StatefulWidget {
     this.icon,
     this.repeat = false,
     this.transparent = false,
+    this.alignment = Alignment.center,
+    this.shortLabel,
+    this.onRepeat,
+    this.minimumSize = const Size(56, 56),
   });
   final String label;
   final bool enabled, repeat, transparent;
+  final Alignment alignment;
+  final String? shortLabel;
+  final Size minimumSize;
   final VoidCallback onPressed;
+  final VoidCallback? onRepeat;
   final IconData? icon;
   @override
   State<_RemoteKey> createState() => _RemoteKeyState();
@@ -425,22 +379,22 @@ class _RemoteKeyState extends State<_RemoteKey> {
     return GestureDetector(
       onLongPressStart: widget.enabled && widget.repeat
           ? (_) {
-              widget.onPressed();
+              (widget.onRepeat ?? widget.onPressed)();
               timer = Timer.periodic(const Duration(milliseconds: 110), (_) {
                 if (widget.enabled) {
-                  widget.onPressed();
+                  (widget.onRepeat ?? widget.onPressed)();
                 } else {
                   stop();
                 }
               });
             }
           : null,
-      onLongPressEnd: (_) => stop(),
-      onLongPressCancel: stop,
+      onLongPressEnd: widget.enabled && widget.repeat ? (_) => stop() : null,
+      onLongPressCancel: widget.enabled && widget.repeat ? stop : null,
       child: TextButton(
         onPressed: widget.enabled ? widget.onPressed : null,
         style: TextButton.styleFrom(
-          minimumSize: const Size(44, 48),
+          minimumSize: widget.minimumSize,
           padding: EdgeInsets.zero,
           backgroundColor: widget.transparent
               ? Colors.transparent
@@ -448,12 +402,37 @@ class _RemoteKeyState extends State<_RemoteKey> {
           foregroundColor: colors.onSurface,
           shape: RoundedRectangleBorder(borderRadius: LinkpadStyle.keyRadius),
         ),
-        child: widget.icon == null
-            ? Text(widget.label, style: const TextStyle(fontSize: 12))
-            : Semantics(
-                label: widget.label,
-                child: Icon(widget.icon, size: 23),
-              ),
+        child: Align(
+          alignment: widget.alignment,
+          widthFactor: widget.transparent ? null : 1,
+          heightFactor: widget.transparent ? null : 1,
+          child: widget.shortLabel != null
+              ? Semantics(
+                  label: widget.label,
+                  excludeSemantics: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(widget.icon, size: 20),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          widget.shortLabel!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : widget.icon == null
+              ? Text(widget.label, style: const TextStyle(fontSize: 12))
+              : Semantics(
+                  label: widget.label,
+                  child: Icon(widget.icon, size: 23),
+                ),
+        ),
       ),
     );
   }

@@ -166,6 +166,67 @@ void main() {
     await server.close(force: true);
   });
 
+  test(
+    'held volume skips busy transport instead of queuing delayed repeats',
+    () async {
+      capabilities = ['pointer.v1', 'media.volume.v1'];
+      ackDelay = const Duration(milliseconds: 350);
+      await peer.connect(
+        'wss://127.0.0.1:${server.port}/ws',
+        fingerprint,
+        '',
+        () {},
+      );
+      await waitFor(peer, () => peer.canVolume);
+      expect(peer.volume('up'), isTrue);
+      await waitFor(peer, () => received.any((m) => m['type'] == 'volume'));
+      for (var i = 0; i < 8; i++) {
+        expect(peer.volume('up', repeat: true), isFalse);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(received.where((m) => m['type'] == 'volume').length, 1);
+      expect(peer.volume('up', repeat: true), isTrue);
+      await waitFor(
+        peer,
+        () => received.where((m) => m['type'] == 'volume').length == 2,
+      );
+    },
+  );
+
+  test(
+    'volume is negotiated, ordered and disabled on older servers or disconnect',
+    () async {
+      capabilities = ['pointer.v1', 'keyboard.v1', 'media.volume.v1'];
+      final address = 'wss://127.0.0.1:${server.port}/ws';
+      await peer.connect(address, fingerprint, '', () {});
+      await waitFor(peer, () => peer.canKeyboard);
+      expect(peer.canVolume, isTrue);
+      for (final action in ['down', 'mute', 'up']) {
+        expect(peer.volume(action), isTrue);
+      }
+      await waitFor(
+        peer,
+        () => received.where((m) => m['type'] == 'volume').length == 3,
+      );
+      expect(
+        received
+            .where((m) => m['type'] == 'volume')
+            .map((m) => m['action'])
+            .toList(),
+        ['down', 'mute', 'up'],
+      );
+      peer.disconnect();
+      expect(peer.supportsVolume, isFalse);
+      expect(peer.volume('up'), isFalse);
+      capabilities = ['pointer.v1', 'keyboard.v1'];
+      await peer.connect(address, fingerprint, '', () {});
+      await waitFor(peer, () => peer.canKeyboard);
+      expect(peer.canVolume, isFalse);
+      expect(peer.volume('mute'), isFalse);
+      expect(received.where((m) => m['type'] == 'volume').length, 3);
+    },
+  );
+
   test('pairing display is pinned and does not enroll or connect', () async {
     final target = DiscoveredServer(
       fingerprint,

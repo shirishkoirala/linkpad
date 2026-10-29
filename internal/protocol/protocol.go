@@ -12,6 +12,7 @@ const Key = "key.v1"
 const Keyboard = "keyboard.v1"
 const SuperKey = "keyboard.super.v1"
 const Drag = "drag.v1"
+const Volume = "media.volume.v1"
 
 type Message struct {
 	Version            int      `json:"version"`
@@ -38,7 +39,7 @@ func Decode(raw []byte) (Message, error) {
 		return m, fmt.Errorf("unsupported protocol version")
 	}
 	switch m.Type {
-	case "hello", "pair", "ready", "pointer", "scroll", "key", "keyboard", "drag", "ack", "error":
+	case "hello", "pair", "ready", "pointer", "scroll", "key", "keyboard", "drag", "volume", "ack", "error":
 	default:
 		return m, fmt.Errorf("unknown message type")
 	}

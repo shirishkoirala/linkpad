@@ -109,6 +109,7 @@ class PeerClient extends ChangeNotifier {
   bool get _pending => _outstanding.isNotEmpty;
   bool _scroll = false, _keys = false;
   bool _keyboard = false;
+  bool _volume = false;
   bool _standaloneSuper = false;
   bool _drag = false, _dragging = false, _dragSent = false;
   bool _releaseDragPending = false, _dragKeepalive = false;
@@ -160,6 +161,8 @@ class PeerClient extends ChangeNotifier {
   bool get canKeyboard =>
       connected && _keyboard && !_stalled && !inputQueueFull;
   bool get supportsKeyboard => _keyboard;
+  bool get supportsVolume => _volume;
+  bool get canVolume => connected && _volume && !_stalled && !inputQueueFull;
   bool get supportsStandaloneSuper => _standaloneSuper;
   bool get supportsDrag => _drag;
   bool get canDrag => ready && _drag;
@@ -441,6 +444,7 @@ class PeerClient extends ChangeNotifier {
         _scroll = capabilities.contains(scrollCapability);
         _keys = capabilities.contains(keyCapability);
         _keyboard = capabilities.contains(keyboardCapability);
+        _volume = capabilities.contains(volumeCapability);
         _standaloneSuper = capabilities.contains(superKeyCapability);
         _drag = capabilities.contains(dragCapability);
         _hadConnected = true;
@@ -603,6 +607,14 @@ class PeerClient extends ChangeNotifier {
   bool typeText(String text) {
     if (!canKeyboard) return false;
     return _queueCommand(keyboardMessage(text: text));
+  }
+
+  bool volume(String action, {bool repeat = false}) {
+    if (!canVolume) return false;
+    // A held button samples current intent; never build an audio burst behind
+    // a slow ACK or earlier keyboard work. Ordinary taps stay ordered/reliable.
+    if (repeat && (_pending || _commands.isNotEmpty)) return false;
+    return _queueCommand(volumeMessage(action));
   }
 
   bool keyboardKey(String key, {Set<String> modifiers = const {}}) {
@@ -938,6 +950,7 @@ class PeerClient extends ChangeNotifier {
     _responseCount = _slowResponseCount = _inputPauseCount = 0;
     _scroll = _keys = false;
     _keyboard = false;
+    _volume = false;
     _standaloneSuper = false;
     _dragHeartbeat?.cancel();
     _dragHeartbeat = null;

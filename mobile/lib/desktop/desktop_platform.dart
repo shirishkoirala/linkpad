@@ -24,6 +24,8 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   String? _shownPairingSecret;
   int _shownPairingDisplay = 0;
   bool permissionCheckBusy = false;
+  bool restartRecommended = false;
+  bool restartBusy = false;
   bool _awaitingPermission = false;
   bool get isMacOS => Platform.isMacOS;
   bool get launchedFromDiskImage =>
@@ -102,12 +104,13 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   Future<void> requestInputPermission() async {
     if (!isMacOS) return;
     _awaitingPermission = true;
+    restartRecommended = false;
     if (server.running) await server.command('requestInputPermission');
     await openPermissions();
   }
 
   Future<void> checkInput() async {
-    if (permissionCheckBusy || server.busy) return;
+    if (permissionCheckBusy || server.busy || restartBusy) return;
     permissionCheckBusy = true;
     notifyListeners();
     try {
@@ -127,6 +130,7 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
           }
         }
       }
+      restartRecommended = isMacOS && server.running && !server.inputAvailable;
       if (server.inputAvailable) {
         _awaitingPermission = false;
         error = null;
@@ -141,7 +145,10 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
 
   @override
   void onWindowFocus() {
-    if (_awaitingPermission) unawaited(checkInput());
+    if (_awaitingPermission ||
+        (isMacOS && server.running && !server.inputAvailable)) {
+      unawaited(checkInput());
+    }
   }
 
   Future<void> openApplications() async {
@@ -212,6 +219,43 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
     await Process.run('/usr/bin/open', [
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
     ]);
+  }
+
+  Future<void> launchFreshInstance() async {
+    final bundle = File(Platform.resolvedExecutable).parent.parent.parent.path;
+    if (!bundle.endsWith('.app')) {
+      throw StateError('Installed app bundle unavailable');
+    }
+    final result = await Process.run('/usr/bin/open', ['-n', bundle]);
+    if (result.exitCode != 0) {
+      throw StateError('macOS could not reopen Linkpad');
+    }
+  }
+
+  Future<void> restartApp() async {
+    if (!isMacOS || restartBusy || _quitting || server.busy) return;
+    restartBusy = true;
+    notifyListeners();
+    final wasRunning = server.running;
+    try {
+      // Release the listener before the new application tries to bind it.
+      await server.stop();
+      await launchFreshInstance();
+      await quit();
+    } catch (_) {
+      if (wasRunning && !server.running) {
+        try {
+          await server.start();
+        } catch (_) {}
+      }
+      error =
+          'Could not restart automatically. Quit and reopen Linkpad, then check access again.';
+    } finally {
+      if (!_quitting) {
+        restartBusy = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> quit() async {

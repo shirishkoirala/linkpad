@@ -54,6 +54,7 @@ func runDesktop(state, listen, advertise string, allow bool) error {
 		registry[protocol.Key] = pointer.KeyBackend{}
 		registry[protocol.Keyboard] = pointer.KeyboardBackend{}
 		registry[protocol.SuperKey] = pointer.SuperKeyBackend{}
+		registry[protocol.Volume] = pointer.VolumeBackend{}
 		registry[protocol.Drag] = pointer.DragBackend{}
 	} else if allow {
 		inputError = fmt.Sprint(pointer.AvailabilityError())

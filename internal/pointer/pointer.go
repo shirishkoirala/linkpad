@@ -52,3 +52,14 @@ func (Backend) Handle(m protocol.Message) error {
 type SuperKeyBackend struct{ KeyboardBackend }
 
 func (SuperKeyBackend) Capability() string { return protocol.SuperKey }
+
+// VolumeBackend sends system media keys without keyboard modifiers.
+type VolumeBackend struct{}
+
+func (VolumeBackend) Capability() string { return protocol.Volume }
+func (VolumeBackend) Handle(m protocol.Message) error {
+	if err := m.ValidateVolume(); err != nil {
+		return err
+	}
+	return nativeVolume(m.Action)
+}

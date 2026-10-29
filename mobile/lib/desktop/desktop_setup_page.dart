@@ -1,3 +1,4 @@
+import 'accessibility_restart_prompt.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -99,7 +100,11 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
         _testBaseline = server.inputCount;
         _clicked = false;
       }
-      final busy = _busy || server.busy || platform.permissionCheckBusy;
+      final busy =
+          _busy ||
+          server.busy ||
+          platform.permissionCheckBusy ||
+          platform.restartBusy;
       final verified =
           _clicked && server.inputCount > (_testBaseline ?? server.inputCount);
       final labels = ['Enable control', 'Connect phone', 'Try it'];
@@ -267,6 +272,7 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
               ),
             ],
           ),
+          AccessibilityRestartPrompt(platform: platform, busy: busy),
         ] else ...[
           _heading(
             Icons.desktop_windows_outlined,

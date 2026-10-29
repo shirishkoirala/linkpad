@@ -3,6 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:linkpad_controller/protocol.dart';
 
 void main() {
+  test('volume protocol advertises support and validates system actions', () {
+    expect(jsonDecode(hello(''))['capabilities'], contains('media.volume.v1'));
+    for (final action in ['down', 'mute', 'up']) {
+      expect(jsonDecode(volumeMessage(action)), {
+        'version': 1,
+        'type': 'volume',
+        'action': action,
+      });
+    }
+    expect(() => volumeMessage('set'), throwsArgumentError);
+  });
+
   test('accepts Go ready messages with omitted empty capabilities', () {
     expect(
       readyCapabilities(parseMessage('{"version":1,"type":"ready"}')),
@@ -37,6 +49,7 @@ void main() {
         'key.v1',
         'keyboard.v1',
         'keyboard.super.v1',
+        'media.volume.v1',
         'drag.v1',
       ],
     });
