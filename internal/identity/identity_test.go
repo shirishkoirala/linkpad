@@ -3,6 +3,7 @@ package identity
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -23,7 +24,8 @@ func TestPersistentPrivateIdentity(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if info.Mode().Perm() != 0600 {
+	// Windows reports synthetic mode bits; access is controlled by ACLs.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatal("key permissions")
 	}
 }

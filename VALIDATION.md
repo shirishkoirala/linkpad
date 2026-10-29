@@ -10,7 +10,11 @@ Local environment: macOS arm64, Go 1.26.5, JDK 17, Android SDK 35.
 - No-cgo cross-builds for linux/amd64, windows/amd64 and darwin/amd64. These use the explicitly unavailable pointer stub.
 - Built executable smoke test: first enrollment, a second invocation reconnecting from the same persisted identity and wrong-pin rejection over real localhost TLS/WebSocket. No mouse input performed.
 
-## Android passed
+## Original native Android client (historical)
+
+The standalone `android/` project was retired on 30 October 2026. The following records describe that original implementation, not the maintained Flutter app in `mobile/`.
+
+### Android passed
 
 - Official Gradle 8.13 wrapper distribution with official SHA-256 checksum pinned.
 - A single clean build completed successfully: `./gradlew clean :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`, using JDK 17 and SDK 35.

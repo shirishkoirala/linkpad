@@ -8,9 +8,8 @@ An MIT-licensed, local-first device connectivity experiment inspired by KDE Conn
 - Mutual TLS proof of identity, mandatory controller-side server fingerprint verification, a single-use 256-bit pairing secret with a two-minute window, persistent desktop trust, reconnect and capability negotiation.
 - An in-process plugin interface and registry. Pointer plugin available only when opted in and supported by the host.
 - Native macOS cursor movement and left/right click through CoreGraphics, gated by Accessibility permission. Linux X11 input uses a pure-Go authenticated XTEST connection for relative movement, clicks, wheel scrolling and arrow keys. Windows and macOS builds without cgo remain unavailable stubs.
-- Kotlin/Compose Android touchpad, first-time pairing and reconnect, Android Keystore EC identity, exact desktop certificate pin, connection status and foreground-only sessions.
-- Flutter Android/iOS controller in `mobile/`, with shared pairing, certificate pinning, touchpad and foreground-only sessions. Flutter uses a software EC identity protected by platform secure storage; physical iPhone validation remains pending.
-- Go integration/security tests, Android protocol unit tests, protocol JSON Schema, CI and build instructions.
+- Flutter Android/iOS controller in `mobile/`, with shared pairing, certificate pinning, touchpad and foreground-only sessions. Flutter uses a software EC identity protected by platform secure storage.
+- Go integration/security tests, Flutter controller tests, protocol JSON Schema, CI and build instructions.
 
 ## Pair by scanning a QR code
 
@@ -66,22 +65,19 @@ unset LINKPAD_PAIR_TOKEN
 
 For a receiver started with an available `-allow-pointer` backend, add `-dx 20 -dy 10` or `-click left` to the controller command. The CLI exits after negotiating/sending one action. Each invocation is a new authenticated connection.
 
-## Android: build and run
+## Mobile: build and run
 
-### Shared Flutter client (Android and iOS)
-
-The new `mobile/` Flutter project shares the controller UI, pairing and touchpad code across Android and iOS. See [mobile/README.md](mobile/README.md) for setup, platform requirements and the secure-storage tradeoff. Run `flutter pub get` and `flutter run` from `mobile/`. The existing Kotlin Android client below remains available during migration. The Flutter iOS target requires a full Xcode installation and hardware verification.
-
-Requirements: JDK 17, Android SDK platform 35, network access for Gradle dependencies. A real device or emulator running **Android 10/API 29+** is required by this slice's TLS 1.3 connection code (minSdk 29).
+The `mobile/` Flutter project is the maintained Android and iOS controller. See [mobile/README.md](mobile/README.md) for setup, platform requirements and secure-storage details. The original standalone Kotlin Android client has been retired; `mobile/android/` remains required for Flutter Android builds.
 
 ```sh
-cd android
-# Set ANDROID_HOME to your installed SDK, or create ignored local.properties with sdk.dir=...
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+cd mobile
+flutter pub get
+flutter analyze
+flutter test
+flutter run
 ```
 
-On the same reachable LAN, enter `wss://DESKTOP-LAN-IP:4747/ws`, the verified 64-character fingerprint, and the first-time secret. Tap **Connect / pair**. A successful handshake saves address/pin in app-private preferences and clears the secret. The non-exportable identity remains in Android Keystore. Subsequent connections use no secret. For the Android emulator, `10.0.2.2` routes to the host; ensure the node listens on a reachable interface. No cleartext transport is supported. Drag the pad to move; click buttons emit complete clicks. Movement is approximate and intentionally drops samples under backpressure.
+For an Android APK, run `flutter build apk --release` from `mobile/`. iOS builds require full Xcode and appropriate signing. Pair with the desktop on the same reachable LAN using the app's QR scanner or manual pairing details.
 
 ## Linux X11 desktop control
 
@@ -107,13 +103,12 @@ X11 core wheel events use discrete notches: small touch deltas accumulate until 
 - `internal/node`: WebSocket sessions, pairing and trust persistence.
 - `internal/protocol`, `protocol/`: wire types, schema and specification.
 - `internal/plugins`, `internal/pointer`: modular capability interface and native/stub backend.
-- `android/`: native Kotlin/Compose controller.
 - `mobile/`: shared Flutter Android/iOS controller and TLS integration tests.
-- `.github/workflows/ci.yml`: Go race tests/vet, cross-platform stub builds, macOS native build and Android build/tests/lint.
+- `.github/workflows/ci.yml`: Go race tests/vet, cross-platform stub builds, and macOS native build. Flutter Android/iOS checks live in `.github/workflows/flutter.yml`.
 
 ## Locally built artifacts
 
-`bin/linkpad` is the macOS arm64 executable; `bin/linkpad-debug.apk` is the installable Android development APK. These are ignored by Git. To install the included APK from the project root, run `adb install -r bin/linkpad-debug.apk`. Rebuild for your platform using the commands above.
+Desktop installers are built under `bin/releases/`. Flutter Android APKs are built under `mobile/build/app/outputs/flutter-apk/`. Build outputs are ignored by Git; use the platform build instructions above.
 
 ## Incomplete / limits
 
