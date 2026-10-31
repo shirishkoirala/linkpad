@@ -4,6 +4,8 @@ Updated: 30 October 2026
 
 ## Current status
 
+The release app identifier is `com.shirishkoirala.linkpad` for Android, iOS, macOS and Linux. Apple test targets use the `.RunnerTests` suffix. Earlier development identifiers are retired; mobile builds with this identifier install as a separate app and may require pairing again. Store records must use the new identifier.
+
 Mac, Linux, Android and iOS have had hands-on testing. Windows final testing is pending. These checks do not yet establish that every release scenario below has passed.
 
 Known follow-ups:

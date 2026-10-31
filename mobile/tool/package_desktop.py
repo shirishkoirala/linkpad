@@ -130,14 +130,14 @@ def linux(args):
         launcher.parent.mkdir(parents=True)
         launcher.write_text('#!/bin/sh\nexec /opt/linkpad/linkpad_controller "$@"\n')
         launcher.chmod(0o755)
-        desktop = root / 'usr/share/applications/org.linkpad.desktop.desktop'
+        desktop = root / 'usr/share/applications/com.shirishkoirala.linkpad.desktop'
         desktop.parent.mkdir(parents=True)
         desktop.write_text(
             '[Desktop Entry]\nType=Application\nName=Linkpad\n'
             'Comment=Use your phone as a touchpad and keyboard\n'
-            'Exec=/usr/bin/linkpad\nIcon=org.linkpad.desktop\nTerminal=false\n'
+            'Exec=/usr/bin/linkpad\nIcon=com.shirishkoirala.linkpad\nTerminal=false\n'
             'Categories=Utility;\nStartupNotify=true\n')
-        icon = root / 'usr/share/icons/hicolor/512x512/apps/org.linkpad.desktop.png'
+        icon = root / 'usr/share/icons/hicolor/512x512/apps/com.shirishkoirala.linkpad.png'
         icon.parent.mkdir(parents=True)
         shutil.copy2(args.icon, icon)
         (work / 'debian').mkdir()

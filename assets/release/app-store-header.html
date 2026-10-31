@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Linkpad App Store header</title>
+<style>
+*{box-sizing:border-box}body{margin:0;width:3840px;height:1646px;overflow:hidden;background:#143e2c;font-family:Arial,Helvetica,sans-serif}.stage{position:relative;width:1280px;height:548.666667px;transform:scale(3);transform-origin:top left;overflow:hidden;background:#143e2c;color:#d5f2bb}.brand{position:absolute;left:64px;top:66px;display:flex;align-items:center;gap:16px;font-size:30px;font-weight:700}.brand img{width:55px;height:55px;border-radius:14px}h1{position:absolute;left:64px;top:175px;margin:0;font-size:66px;line-height:1.06;letter-spacing:-.4px;font-weight:700}.features{position:absolute;left:67px;top:362px;display:flex;gap:23px;font-size:21px;color:#deead6}.features span+span:before{content:'·';margin-right:23px;color:#9bc67e}.trail{position:absolute;left:690px;top:-20px;width:640px;height:610px;fill:none;stroke:#86b575;stroke-width:1.2;opacity:.3}.phone{position:absolute;width:190px;padding:6px;border-radius:25px;background:#17251e;border:1px solid #799174;box-shadow:0 18px 30px #00000030}.phone img{display:block;width:100%;border-radius:19px}.touchpad{left:800px;top:109px;transform:rotate(-4deg)}.remote{left:1015px;top:62px;transform:rotate(4deg)}
+body.search{width:1920px;height:1280px}.search .stage{height:853.333333px;transform:scale(1.5)}.search .brand{top:112px}.search h1{top:290px}.search .features{top:487px}.search .trail{top:110px}.search .touchpad{top:296px}.search .remote{top:155px}
+</style>
+<div class="stage">
+ <svg class="trail" viewBox="0 0 640 610" aria-hidden="true"><circle cx="340" cy="310" r="245"/><circle cx="340" cy="310" r="280"/><circle cx="340" cy="310" r="315"/></svg>
+ <div class="brand"><img src="google-play-icon.png" alt="">Linkpad</div>
+ <h1>Your computer.<br>At your fingertips.</h1>
+ <div class="features"><span>Touchpad</span><span>Keyboard</span><span>Remote</span></div>
+ <div class="phone touchpad"><img src="screenshots/iOS/touchpad.png" alt="Linkpad touchpad"></div>
+ <div class="phone remote"><img src="screenshots/iOS/remote.png" alt="Linkpad remote"></div>
+</div>
+<script>document.body.classList.toggle('search',new URLSearchParams(location.search).get('variant')==='search');</script>
+</html>

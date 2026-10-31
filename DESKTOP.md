@@ -78,7 +78,7 @@ open build/macos/Build/Products/Release/Linkpad.app
 
 The Xcode embed phase runs `tool/build_server.sh` before signing the app. It
 compiles and signs `Contents/Resources/linkpad-server` with matching app
-architectures. The app uses bundle ID `org.linkpad.desktop`, a separate identity
+architectures. The app uses bundle ID `com.shirishkoirala.linkpad`, a separate identity
 from the mobile controller. The macOS desktop target is intentionally outside
 App Sandbox so the helper can use desktop input and the existing server state.
 Public distribution still needs appropriate signing and notarization; the local

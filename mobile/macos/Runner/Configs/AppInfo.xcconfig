@@ -8,7 +8,7 @@
 PRODUCT_NAME = Linkpad
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = org.linkpad.desktop
+PRODUCT_BUNDLE_IDENTIFIER = com.shirishkoirala.linkpad
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 org.linkpad. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Shirish Koirala. All rights reserved.
