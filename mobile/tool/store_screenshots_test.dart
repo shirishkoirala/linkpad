@@ -60,13 +60,22 @@ void main() {
     }
   });
 
-  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+  for (final profile in ['android', 'iOS', 'iPad']) {
+    final platform = profile == 'android'
+        ? TargetPlatform.android
+        : TargetPlatform.iOS;
     for (final screen in ['touchpad', 'remote', 'keyboard', 'settings']) {
-      testWidgets('${platform.name} $screen store capture', (tester) async {
+      testWidgets('$profile $screen store capture', (tester) async {
         final ios = platform == TargetPlatform.iOS;
-        final size = ios ? const Size(430, 932) : const Size(360, 800);
-        tester.view.physicalSize = size * 3;
-        tester.view.devicePixelRatio = 3;
+        final tablet = profile == 'iPad';
+        final ratio = tablet ? 2.0 : 3.0;
+        final size = tablet
+            ? const Size(1032, 1376)
+            : ios
+            ? const Size(430, 932)
+            : const Size(360, 800);
+        tester.view.physicalSize = size * ratio;
+        tester.view.devicePixelRatio = ratio;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final peer = ScreenshotPeer();
@@ -111,11 +120,9 @@ void main() {
         final boundary =
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         await tester.runAsync(() async {
-          final image = await boundary.toImage(pixelRatio: 3);
+          final image = await boundary.toImage(pixelRatio: ratio);
           final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          final folder = Directory(
-            '../assets/release/screenshots/${platform.name}',
-          );
+          final folder = Directory('../assets/release/screenshots/$profile');
           await folder.create(recursive: true);
           await File(
             '${folder.path}/$screen.png',

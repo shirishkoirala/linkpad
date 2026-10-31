@@ -12,6 +12,7 @@ Promotional artwork and screenshot panels for the initial release.
 
 ## Deliverables
 
+- Store listing copy: [Android](store-listing-android.md) and [iOS](store-listing-ios.md), including platform-specific fields and asset upload references.
 - `google-play-feature.png`: Google Play feature graphic; target 1024 × 500.
 - `social-preview.png`: GitHub/social preview; target 1280 × 640.
 - `google-play-icon.png`: existing approved artwork exported at 512 × 512.
@@ -31,6 +32,8 @@ Create minimal editorial marketing artwork using the approved Linkpad logo as th
 `store-screenshots/android/` contains four 1080 × 1920 promotional panels. `store-screenshots/iOS/` contains four 1290 × 2796 panels. Each folder also includes `overview.png` for review; the overview is not an individual store upload.
 
 For the App Store Connect “iPhone with Dynamic Island (medium display)” slot, use `store-screenshots/iOS-medium/`: four 1206 × 2622 panels. These are laid out for that canvas rather than stretched from the larger exports.
+
+For the required 13-inch iPad slot, use `store-screenshots/iPad-13/`: four 2064 × 2752 panels based on actual iPad-sized Flutter layouts. Raw iPad UI captures are under `screenshots/iPad/`. Do not upload the overview image.
 
 The panels cover Touchpad, Remote, Keyboard and Settings. They use actual Flutter widget renders with production fonts and a sample connected computer named “Living room”. They are rendered fixtures, not physical-device captures: no real connection or latency measurement is implied. No app screen is AI-generated. The surrounding artwork and captions are editable in `store-panels.html`.
 

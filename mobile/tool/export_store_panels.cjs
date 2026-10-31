@@ -12,18 +12,20 @@ const {pathToFileURL} = require('node:url');
   });
   try {
     const root = path.resolve('assets/release');
-    for (const profile of ['android', 'iOS', 'iOS-medium']) {
+    for (const profile of ['android', 'iOS', 'iOS-medium', 'iPad-13']) {
       const ios = profile !== 'android';
       const medium = profile === 'iOS-medium';
+      const tablet = profile === 'iPad-13';
       const platform = ios ? 'iOS' : 'android';
-      const viewport = {width: medium ? 1608 : ios ? 1720 : 1440, height: medium ? 874 : ios ? 932 : 640};
+      const viewport = {width: tablet ? 4128 : medium ? 1608 : ios ? 1720 : 1440, height: tablet ? 1376 : medium ? 874 : ios ? 932 : 640};
       const page = await browser.newPage({
         viewport,
-        deviceScaleFactor: 3,
+        deviceScaleFactor: tablet ? 2 : 3,
       });
       const url = pathToFileURL(path.join(root, 'store-panels.html'));
       url.searchParams.set('platform', platform);
       if (medium) url.searchParams.set('size', 'medium');
+      if (tablet) url.searchParams.set('size', 'tablet');
       await page.goto(url.href);
       await page.evaluate(async () => {
         await document.fonts.ready;

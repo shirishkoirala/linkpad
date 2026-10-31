@@ -1,5 +1,7 @@
 # Linkpad store description
 
+This is the original shared draft. Use the separate [Android listing](store-listing-android.md) and [iOS listing](store-listing-ios.md) for submission copy and platform-specific fields.
+
 ## Short description
 
 Control your computer with your phone’s touchpad, keyboard and remote.

@@ -6,6 +6,7 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif}main{display:flex;gap:0;width:max-content}.panel{width:430px;height:932px;position:relative;overflow:hidden;padding:32px 36px;background:var(--bg);color:var(--ink)}.touchpad{--bg:#143e2c;--ink:#d5f2bb;--line:#82b875}.remote{--bg:#d3eab7;--ink:#163e2c;--line:#7b9c65}.keyboard{--bg:#1c5653;--ink:#e2f5df;--line:#75b5a0}.settings{--bg:#edf1e5;--ink:#244f39;--line:#a5ba96}.brand{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:700;letter-spacing:0}.brand img{width:30px;height:30px;border-radius:8px}h1{position:relative;z-index:2;font-size:49px;line-height:1.06;letter-spacing:-.6px;margin:23px 0 12px;font-weight:750}p{position:relative;z-index:2;font-size:16px;line-height:1.45;margin:0;max-width:325px;opacity:.85}.trail{position:absolute;width:570px;height:760px;left:-85px;top:210px;opacity:.28;fill:none;stroke:var(--line);stroke-width:2}.phone{position:absolute;top:253px;left:60px;width:310px;padding:7px;border-radius:31px;background:#17251e;border:1px solid #56715a;box-shadow:0 26px 46px #0000002d}.phone img{display:block;width:100%;border-radius:24px}.remote .phone{transform:rotate(2deg)}.keyboard .phone{transform:rotate(-2deg)}.settings .phone{top:265px}.hint{position:absolute;bottom:24px;left:36px;font-size:11px;text-transform:uppercase;letter-spacing:2px;font-weight:700;opacity:.6}.android .panel{width:360px;height:640px;padding:22px 28px}.android .brand{font-size:16px}.android .brand img{width:24px;height:24px}.android h1{font-size:35px;letter-spacing:-.3px;margin:14px 0 8px}.android p{font-size:12px;line-height:1.35;max-width:290px}.android .phone{width:195px;left:82.5px;top:194px;padding:5px;border-radius:24px;box-shadow:0 14px 28px #0000002d}.android .phone img{border-radius:18px}.android .settings .phone{top:194px}.android .trail{top:100px;left:-110px}.android .hint{display:none}
 .medium .panel{width:402px;height:874px;padding:32px}.medium h1{font-size:45px;margin-top:20px}.medium .phone{width:280px;left:61px;top:252px}.medium .settings .phone{top:252px}
+.tablet .panel{width:1032px;height:1376px;padding:56px}.tablet .brand{font-size:28px;gap:14px}.tablet .brand img{width:48px;height:48px}.tablet h1{font-size:80px;line-height:1.06;margin:36px 0 18px}.tablet p{font-size:28px;line-height:1.4;max-width:850px}.tablet .phone{width:650px;left:191px;top:455px;padding:9px;border-radius:34px}.tablet .phone img{border-radius:24px}.tablet .remote .phone,.tablet .keyboard .phone{transform:none}.tablet .settings .phone{top:455px}.tablet .trail{width:1140px;height:1520px;left:-54px;top:260px}
 </style>
 <main>
 <section class="panel touchpad" data-screen="touchpad">
@@ -41,6 +42,13 @@
 const platform=new URLSearchParams(location.search).get('platform')==='android'?'android':'iOS';
 document.body.classList.toggle('android',platform==='android');
 document.body.classList.toggle('medium',new URLSearchParams(location.search).get('size')==='medium');
-document.querySelectorAll('[data-capture]').forEach(img=>img.src=`screenshots/${platform}/${img.dataset.capture}.png`);
+const tablet=new URLSearchParams(location.search).get('size')==='tablet';
+document.body.classList.toggle('tablet',tablet);
+if(tablet){
+ document.querySelector('.touchpad h1').innerHTML='A trackpad.<br>On your iPad.';
+ document.querySelector('.touchpad p').innerHTML='Move. Tap. Scroll.<br>Your iPad knows the gestures.';
+ document.querySelector('.keyboard p').innerHTML='Type on your iPad.<br>Send shortcuts to your computer.';
+}
+document.querySelectorAll('[data-capture]').forEach(img=>img.src=`screenshots/${tablet?'iPad':platform}/${img.dataset.capture}.png`);
 </script>
 </html>
