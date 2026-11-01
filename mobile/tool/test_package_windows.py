@@ -41,6 +41,7 @@ class WindowsPackageTest(unittest.TestCase):
             with patch.object(packager.sys, 'platform', 'win32'), patch.object(packager.platform, 'machine', return_value='AMD64'), patch.object(packager, 'windows_runtime', return_value=runtime), patch.object(packager, 'run', side_effect=compile_installer):
                 packager.windows(args)
                 self.assertTrue(destination.with_suffix('.exe.sha256').is_file())
+                self.assertNotIn(b'\r', destination.with_suffix('.exe.sha256').read_bytes())
                 (runtime / 'vcruntime140_1.dll').unlink()
                 with self.assertRaisesRegex(ValueError, 'Missing Visual C'):
                     packager.windows(args)

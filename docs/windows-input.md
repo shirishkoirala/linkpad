@@ -2,6 +2,8 @@
 
 1 November 2026: the maintainer tested the Windows command-line server on a physical PC and reported all requested input controls working. Initial pairing failed because the Windows clock was wrong; correcting date/time resolved it. Automated native Windows CI results are tracked separately from this hands-on test.
 
+Native Windows input CI passed in [run 41291427811](https://github.com/shirishkoirala/linkpad/actions/runs/41291427811). The Windows GUI and installer smoke test passed in [run 41291493315](https://github.com/shirishkoirala/linkpad/actions/runs/41291493315): installation, visible window, bundled server startup and helper shutdown. Download the `desktop-Windows` artifact from that run. The installer is unsigned; physical GUI/tray/start-at-login checks remain pending.
+
 The Go server now includes a Windows `SendInput` backend. It supports relative mouse movement, complete left/right clicks, leased left-button dragging, natural vertical/horizontal scrolling, arrow keys, Unicode text, keyboard shortcuts, the Windows key, and volume up/down/mute.
 
 ## Build and run

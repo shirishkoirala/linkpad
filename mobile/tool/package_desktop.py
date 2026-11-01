@@ -22,7 +22,7 @@ def run(*args, **kwargs):
 
 def checksum(path):
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    path.with_suffix(path.suffix + '.sha256').write_text(f'{digest}  {path.name}\n')
+    path.with_suffix(path.suffix + '.sha256').write_bytes(f'{digest}  {path.name}\n'.encode('utf-8'))
     print(f'Created {path}', flush=True)
 
 
