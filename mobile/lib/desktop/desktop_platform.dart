@@ -28,6 +28,7 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
   bool restartBusy = false;
   bool _awaitingPermission = false;
   bool get isMacOS => Platform.isMacOS;
+  bool get isWindows => Platform.isWindows;
   bool get launchedFromDiskImage =>
       isMacOS && macInstallationNeedsMove(Platform.resolvedExecutable);
 
@@ -49,7 +50,9 @@ class DesktopPlatform extends ChangeNotifier with TrayListener, WindowListener {
     try {
       trayManager.addListener(this);
       await trayManager.setIcon(
-        'assets/branding/tray-icon.png',
+        Platform.isWindows
+            ? 'assets/branding/tray-icon.ico'
+            : 'assets/branding/tray-icon.png',
         isTemplate: Platform.isMacOS,
       );
       if (Platform.isMacOS) await trayManager.setToolTip('Linkpad');

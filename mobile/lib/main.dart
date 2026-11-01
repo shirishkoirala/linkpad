@@ -9,7 +9,7 @@ import 'desktop/server_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isMacOS || Platform.isLinux) {
+  if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
     final server = ServerController();
     final desktop = DesktopPlatform(server);
     runApp(LinkpadApp(desktopServer: server, desktopPlatform: desktop));

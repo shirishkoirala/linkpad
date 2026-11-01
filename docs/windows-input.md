@@ -15,7 +15,7 @@ go build -o linkpad-windows-x86_64.exe ./cmd/linkpad
 
 Run as the logged-in desktop user. Allow the server on your trusted private network in Windows Firewall when prompted; the phone needs access to TCP 4747. Pair with the displayed QR code as on other platforms. Keep pairing secrets private.
 
-The Flutter desktop GUI and Windows installer are not implemented yet; this is the command-line server. Mac/Linux release automation does not produce a Windows installer.
+For the graphical app, run `flutter build windows --release` from `mobile/`. The Windows runner bundles the Go helper automatically. The per-user installer and GitHub Actions job are documented in [PACKAGING.md](../PACKAGING.md). The command-line executable remains available separately.
 
 ## Session and permission limits
 

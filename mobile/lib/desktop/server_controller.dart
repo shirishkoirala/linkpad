@@ -4,6 +4,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+String bundledServerPath(String directory, String operatingSystem) =>
+    switch (operatingSystem) {
+      'macos' => '$directory/../Resources/linkpad-server',
+      'windows' => '$directory/linkpad-server.exe',
+      _ => '$directory/lib/linkpad-server',
+    };
+
 class DesktopPeer {
   const DesktopPeer(this.id, this.connected);
   final String id;
@@ -144,9 +151,7 @@ class ServerController extends ChangeNotifier {
     final override = Platform.environment['LINKPAD_SERVER_BINARY'];
     if (override != null && override.isNotEmpty) return override;
     final base = File(Platform.resolvedExecutable).parent.path;
-    return Platform.isMacOS
-        ? '$base/../Resources/linkpad-server'
-        : '$base/lib/linkpad-server';
+    return bundledServerPath(base, Platform.operatingSystem);
   }
 
   Future<void> start() => _serialize(() async {

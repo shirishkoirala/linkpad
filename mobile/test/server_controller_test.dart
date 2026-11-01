@@ -3,6 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:linkpad_controller/desktop/server_controller.dart';
 
 void main() {
+  test('bundled helper paths match each desktop install layout', () {
+    expect(
+      bundledServerPath('C:/Program Files/Linkpad', 'windows'),
+      'C:/Program Files/Linkpad/linkpad-server.exe',
+    );
+    expect(
+      bundledServerPath('/Applications/Linkpad.app/Contents/MacOS', 'macos'),
+      '/Applications/Linkpad.app/Contents/MacOS/../Resources/linkpad-server',
+    );
+    expect(
+      bundledServerPath('/opt/linkpad', 'linux'),
+      '/opt/linkpad/lib/linkpad-server',
+    );
+  });
   final binary = Platform.environment['LINKPAD_DESKTOP_TEST_BINARY'];
 
   test(

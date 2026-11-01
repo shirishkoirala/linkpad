@@ -6,7 +6,7 @@ Updated: 30 October 2026
 
 1 November 2026: Android and iOS release steps are complete, as reported by the maintainer. Public store availability has not been independently verified. Desktop distribution through GitHub Actions is the next release task.
 
-Desktop automation: `.github/workflows/desktop-release.yml` builds Linux x86_64 and macOS installers and creates a draft GitHub Release. See [PACKAGING.md](../PACKAGING.md) for triggers and required Mac signing secrets. Public Mac distribution remains pending Developer ID signing and notarization; Windows packaging is not included yet.
+Desktop automation: `.github/workflows/desktop-release.yml` builds Linux x86_64, macOS and Windows x86_64 installers. Manual runs produce artifacts, with optional draft-release creation; version tags create draft releases. See [PACKAGING.md](../PACKAGING.md) for triggers and signing requirements. Public Mac distribution remains pending Developer ID signing/notarization, and Windows code signing is not configured yet.
 
 The release app identifier is `com.shirishkoirala.linkpad` for Android, iOS, macOS and Linux. Apple test targets use the `.RunnerTests` suffix. Earlier development identifiers are retired; mobile builds with this identifier install as a separate app and may require pairing again. Store records must use the new identifier.
 
@@ -15,7 +15,7 @@ Mac, Linux, Android and iOS have had hands-on testing. Windows final testing is 
 Known follow-ups:
 
 - [ ] Complete Windows testing and confirm the Windows build and installer are ready.
-- Windows Go input backend is implemented; see [Windows input](windows-input.md) for command-line use and Docker/Wine checks. Windows GUI/installer and physical Windows validation remain pending.
+- Windows Go input controls passed maintainer testing on a physical PC. The shared Windows GUI, installer and CI smoke test are implemented; physical installer/tray/startup testing remains pending. See [Windows input](windows-input.md).
 - [ ] Investigate Linux volume controls. Media key mappings and Xfce shortcuts are present, but end-to-end operation is not verified. The requested Docker investigation is pending.
 - [ ] Confirm the smaller Android adaptive icon fits the launcher mask on the physical device.
 

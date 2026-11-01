@@ -221,7 +221,10 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
 
   Widget _control(bool busy) {
     final mac = platform.isMacOS;
-    final wayland = !mac && server.inputError.toLowerCase().contains('wayland');
+    final wayland =
+        !mac &&
+        !platform.isWindows &&
+        server.inputError.toLowerCase().contains('wayland');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -273,6 +276,21 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
             ],
           ),
           AccessibilityRestartPrompt(platform: platform, busy: busy),
+        ] else if (platform.isWindows) ...[
+          _heading(
+            Icons.desktop_windows_outlined,
+            'Open Linkpad in your Windows session',
+          ),
+          const Text(
+            'Keep your desktop unlocked and run Linkpad as your normal user. Lock screens and UAC prompts cannot be controlled. Apps running as administrator may reject input.',
+          ),
+          const SizedBox(height: 14),
+          Text(server.inputError),
+          const SizedBox(height: 20),
+          OutlinedButton(
+            onPressed: busy ? null : () => _act(platform.checkInput),
+            child: const Text('Check again'),
+          ),
         ] else ...[
           _heading(
             Icons.desktop_windows_outlined,
@@ -327,6 +345,12 @@ class _DesktopSetupPageState extends State<DesktopSetupPage> {
               : 'Open Linkpad on your phone and choose Pair a computer. Both devices need to be on the same reachable local network. Your computer can use Ethernet.',
         ),
         const SizedBox(height: 18),
+        if (platform.isWindows) ...[
+          const Text(
+            'Allow Linkpad on your Private network if Windows Firewall asks. Keep Windows date and time set automatically so pairing codes do not appear expired.',
+          ),
+          const SizedBox(height: 18),
+        ],
         if (!validAddress) ...[
           Text(
             server.addressError.isNotEmpty

@@ -188,10 +188,72 @@ def linux(args):
         checksum(destination)
 
 
+def windows_runtime():
+    vswhere = Path(os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)')) / 'Microsoft Visual Studio/Installer/vswhere.exe'
+    if vswhere.is_file():
+        result = run(vswhere, '-latest', '-products', '*', '-requires',
+                     'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                     '-property', 'installationPath', capture_output=True, text=True)
+        folders = sorted(Path(result.stdout.strip()).glob('VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT'))
+        if folders:
+            return folders[-1]
+    raise ValueError('Visual C++ x64 redistributable DLLs were not found. Install the Visual Studio C++ desktop workload.')
+
+
+def windows(args):
+    if sys.platform != 'win32' or platform.machine().lower() not in ('amd64', 'x86_64'):
+        raise ValueError('Create the Windows x86_64 installer on Windows x64.')
+    bundle = (args.bundle or MOBILE / 'build/windows/x64/runner/Release').resolve()
+    for name in ('Linkpad.exe', 'linkpad-server.exe', 'flutter_windows.dll', 'data/icudtl.dat', 'data/app.so'):
+        if not (bundle / name).is_file():
+            raise ValueError(f'Missing release bundle file: {bundle / name}')
+    iscc = args.iscc or shutil.which('ISCC.exe') or Path(os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)')) / 'Inno Setup 6/ISCC.exe'
+    if not Path(iscc).is_file():
+        raise ValueError('Install Inno Setup 6, or provide --iscc PATH.')
+    destination = args.output / f'Linkpad-{args.version}-windows-x86_64-setup.exe'
+    def quoted(path):
+        value = str(path)
+        if '\n' in value or '\r' in value:
+            raise ValueError('Installer paths cannot contain newlines.')
+        return '"' + value.replace('"', '""') + '"'
+    with tempfile.TemporaryDirectory(prefix='linkpad-windows-') as temporary:
+        work = Path(temporary)
+        payload = work / 'app'
+        shutil.copytree(bundle, payload)
+        runtime = windows_runtime()
+        for dll in runtime.glob('*.dll'):
+            shutil.copy2(dll, payload / dll.name)
+        for name in ('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'):
+            if not (payload / name).is_file():
+                raise ValueError(f'Missing Visual C++ runtime: {name}')
+        installer = work / 'linkpad.iss'
+        installer.write_text(
+            '[Setup]\nAppId=com.shirishkoirala.linkpad\nAppName=Linkpad\n'
+            f'AppVersion={args.version}\nAppPublisher=Shirish Koirala\n'
+            'AppSupportURL=https://shirishkoirala.com/linkpad-support/\n'
+            'DefaultDirName={localappdata}\\Programs\\Linkpad\nDefaultGroupName=Linkpad\n'
+            'PrivilegesRequired=lowest\nArchitecturesAllowed=x64compatible\n'
+            'ArchitecturesInstallIn64BitMode=x64compatible\n'
+            'CloseApplications=yes\nRestartApplications=no\nUninstallDisplayIcon={app}\\Linkpad.exe\n'
+            'Compression=lzma2\nSolidCompression=yes\nWizardStyle=modern\n'
+            f'OutputDir={quoted(args.output)}\nOutputBaseFilename={destination.stem}\n'
+            f'SetupIconFile={quoted(MOBILE / "windows/runner/resources/app_icon.ico")}\n'
+            '[Files]\n'
+            f'Source: {quoted(payload / "*")}; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs\n'
+            '[Icons]\nName: "{group}\\Linkpad"; Filename: "{app}\\Linkpad.exe"\n'
+            '[Run]\nFilename: "{app}\\Linkpad.exe"; Description: "Open Linkpad"; Flags: nowait postinstall skipifsilent\n',
+            encoding='utf-8-sig')
+        run(iscc, installer)
+    if not destination.is_file():
+        raise ValueError('Inno Setup did not produce the expected installer.')
+    checksum(destination)
+    print('Windows installer is unsigned. Code signing must be configured separately for public distribution.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='platform', required=True)
-    for name in ('macos', 'linux'):
+    for name in ('macos', 'linux', 'windows'):
         item = sub.add_parser(name)
         item.add_argument('--version')
         item.add_argument('--output', type=Path, default=REPO / 'bin/releases')
@@ -200,6 +262,9 @@ def main():
             item.add_argument('--skip-build', action='store_true')
             item.add_argument('--identity', default='-')
             item.add_argument('--notary-profile')
+        elif name == 'windows':
+            item.add_argument('--bundle', type=Path)
+            item.add_argument('--iscc', type=Path)
         else:
             item.add_argument('--bundle', type=Path)
             item.add_argument('--docker', action='store_true')
@@ -212,7 +277,7 @@ def main():
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
     try:
-        (mac if args.platform == 'macos' else linux)(args)
+        {'macos': mac, 'linux': linux, 'windows': windows}[args.platform](args)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         if getattr(error, 'stderr', None):
             print(error.stderr, file=sys.stderr)

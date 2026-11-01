@@ -67,11 +67,19 @@ class SetupServer extends ServerController {
 }
 
 class SetupPlatform extends DesktopPlatform {
-  SetupPlatform(super.server, {this.mac = true, this.diskImage = false});
+  SetupPlatform(
+    super.server, {
+    this.mac = true,
+    this.diskImage = false,
+    this.windows = false,
+  });
+  final bool windows;
   final bool mac, diskImage;
   int settingsOpened = 0, loginChanges = 0;
   @override
   bool get isMacOS => mac;
+  @override
+  bool get isWindows => windows;
   @override
   bool get launchedFromDiskImage => diskImage;
   @override
@@ -162,6 +170,23 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Windows input recovery avoids Linux and Mac instructions', (
+    tester,
+  ) async {
+    final server = SetupServer()
+      ..running = true
+      ..inputError = 'Windows interactive desktop unavailable';
+    await show(
+      tester,
+      server,
+      SetupPlatform(server, mac: false, windows: true),
+    );
+    expect(find.text('Open Linkpad in your Windows session'), findsOneWidget);
+    expect(find.textContaining('UAC prompts'), findsOneWidget);
+    expect(find.textContaining('X11'), findsNothing);
+    expect(find.text('Open Accessibility settings'), findsNothing);
+  });
 
   testWidgets('Linux Wayland recovery never displays Mac permission actions', (
     tester,

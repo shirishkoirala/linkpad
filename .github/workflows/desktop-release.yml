@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create/update a draft release (leave off to test artifacts only)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        os: [ubuntu-24.04, macos-15, windows-2022]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -49,6 +54,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.7'
@@ -63,6 +71,7 @@ jobs:
         working-directory: mobile
       - run: go test -race ./...
       - run: go vet ./...
+      - run: python mobile/tool/test_package_windows.py
       - run: flutter analyze
         working-directory: mobile
       - run: flutter test --concurrency=1
@@ -73,6 +82,22 @@ jobs:
           flutter build linux --release
           python3 tool/package_desktop.py linux
         working-directory: mobile
+      - name: Build Windows app and installer
+        if: runner.os == 'Windows'
+        run: |
+          flutter build windows --release
+          python tool/package_desktop.py windows
+        working-directory: mobile
+      - name: Install and launch Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem bin/releases/*-windows-x86_64-setup.exe).FullName
+          $directory = Join-Path $env:RUNNER_TEMP 'Linkpad smoke install'
+          $result = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$directory`"") -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Installer failed: $($result.ExitCode)" }
+          python mobile/tool/windows-desktop-smoke.py "$directory/Linkpad.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Windows GUI smoke test failed' }
       - name: Build and package Mac app
         if: runner.os == 'macOS'
         shell: bash
@@ -117,11 +142,13 @@ jobs:
           path: |
             bin/releases/*.deb
             bin/releases/*.dmg
+            bin/releases/*-windows-x86_64-setup.exe
             bin/releases/*.sha256
           if-no-files-found: error
 
   release:
     needs: [version, build]
+    if: github.event_name == 'push' || inputs.create_release
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -148,10 +175,11 @@ jobs:
 
           - Linux: x86_64 Debian package for Ubuntu 24.04 / Linux Mint 22-compatible systems. Input requires an X11 desktop session.
           - Mac: drag Linkpad into Applications, open it, and grant Accessibility permission.
+          - Windows: x86_64 per-user installer, with graphical setup, tray controls and the bundled server. The installer is unsigned; Windows may show a publisher/SmartScreen warning.
           - Pair your phone by scanning the desktop QR code on the same local network.
           - SHA-256 checksum files accompany the installers.
 
-          Before publishing, test fresh installation, upgrades, discovery, pairing and reconnect on physical desktops. Windows is not included in this release workflow.
+          Before publishing, test fresh installation, upgrades, discovery, pairing and reconnect on physical desktops. Windows code signing is not configured yet.
           NOTES
           if compgen -G 'installers/*-macos-local.dmg' > /dev/null; then
             cat >> notes.md <<'NOTES'

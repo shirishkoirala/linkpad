@@ -2,11 +2,28 @@
 
 ## GitHub Actions releases
 
-The **Desktop release** workflow builds Linux x86_64 and macOS installers on native runners, runs Go race tests/vet and Flutter analysis/tests, verifies package checksums, and attaches the installers to a **draft** GitHub Release. It never publishes a release automatically. Windows installers are not included yet.
+The **Desktop release** workflow builds Linux x86_64, macOS and Windows x86_64 installers on native runners, runs Go race tests/vet and Flutter analysis/tests, and retains installers and checksums as Actions artifacts. Tag-triggered runs attach them to a **draft** GitHub Release. It never publishes a release automatically.
 
-Run it from **Actions → Desktop release → Run workflow**, or push a tag such as `v0.1.0`. A tag must match the version in `mobile/pubspec.yaml` (without the `+build` suffix). Manual runs use the version from the selected source ref. Build both installers from the same approved commit.
+Run it from **Actions → Desktop release → Run workflow**, or push a tag such as `v0.1.0`. A tag must match the version in `mobile/pubspec.yaml` (without the `+build` suffix). Manual runs use the version from the selected source ref and build artifacts only by default; enable **Create/update a draft release** when ready. Build all installers from the same approved commit.
 
-Artifacts also appear on the Actions run under `desktop-Linux` and `desktop-macOS`. Failed builds prevent the draft-release job. Reruns can replace assets in a draft, but refuse to overwrite a published release. When replacing a draft, remove any obsolete installer asset before publishing (for example, an old `macos-local.dmg` after signing is enabled).
+Artifacts appear under `desktop-Linux`, `desktop-macOS` and `desktop-Windows`. Failed builds prevent the draft-release job. Reruns can replace assets in a draft from the same commit, but refuse to overwrite a published release or a draft from another commit. When replacing a draft, remove any obsolete installer asset before publishing (for example, an old `macos-local.dmg` after signing is enabled).
+
+### Windows installer
+
+On Windows x64 with Flutter, Go, Visual Studio's C++ desktop workload and Inno Setup 6.3 or newer installed:
+
+```powershell
+cd mobile
+flutter build windows --release
+cd ..
+python mobile/tool/package_desktop.py windows
+```
+
+The installer is `bin/releases/Linkpad-0.1.0-windows-x86_64-setup.exe`, with a `.sha256` checksum. It installs the GUI, bundled Go helper, plugins and Visual C++ runtime DLLs into the current user's Local AppData Programs directory and adds a Start menu entry. Administrator access is not required for installation. No firewall rule, service or automatic startup is enabled by the installer. Start-at-login remains an explicit setting in the app.
+
+Quit any old command-line server or running GUI before installing/upgrading. Keep Windows time synchronized for pairing, and allow Linkpad on the Private network if Windows Firewall asks. The app runs in your logged-in desktop session; secure desktop and elevated-app restrictions still apply.
+
+The Windows package is currently **unsigned**; publisher/SmartScreen warnings may appear. Code signing is a separate release requirement. CI silently installs into an isolated test directory, verifies a visible GUI and a bundled server child listening on TCP 4747, then verifies terminating the GUI stops the helper. This supplements, rather than replaces, physical installer and tray/startup testing.
 
 ### Mac signing secrets
 
