@@ -1,9 +1,25 @@
 # Security
 
-This experimental implementation has not had an independent security audit. TLS encryption alone does not establish the intended device: verify the SHA-256 desktop fingerprint through a trusted channel before entering the pairing secret. Neither native client uses generic trust-all TLS; hostname validation is replaced by exact certificate identity pinning. Both peers prove private-key possession during TLS 1.3.
+Linkpad has not had an independent security audit. Do not expose its listener to the public internet.
 
-Pairing is opt-in, expires in two minutes and consumes a cryptographically random 256-bit secret once. The listener defaults to loopback. Pointer control is opt-in and negotiated after trust verification. Existing trust grants all enabled capabilities; finer permission policy is future work. The server does not authenticate unknown certificates at TLS level against a CA because onboarding uses self-signed peer certificates; it authenticates them at the application handshake before granting capabilities.
+## Connections and trust
 
-Unknown connections can still consume TLS/session resources. No global admission quota, multi-process trust coordination or hardware-protected desktop key exists. State corruption fails closed, but filesystem attackers running as the same user can read the desktop key or edit trust. Stop/restart is required for revocation. Expired certificates fail connections; automatic renewal is absent.
+Connections use TLS 1.3 with mutual proof of private-key possession. The controller verifies the exact desktop certificate fingerprint and certificate validity dates instead of relying on a public certificate authority. QR pairing transfers the expected fingerprint and a random 256-bit secret directly from the desktop; verify manual details through a trusted channel.
 
-Do not expose the listener to the public internet. When reporting a vulnerability, do not publish secrets/private keys. A private reporting contact will be added when the repository owner and hosting are selected; this scaffold cannot provide a working reporting address yet.
+The server permits an unknown self-signed certificate through TLS only so it can request pairing. Input requires successful application-level authentication and capability negotiation. Pairing is opt-in, single-use and expires after two minutes. Discovery exposes public identity/address information, never a pairing secret, and does not authorize a device.
+
+The command-line listener defaults to loopback. The graphical desktop app starts a LAN listener on TCP 4747. Use a trusted local network and appropriate firewall rules.
+
+## Revocation and local state
+
+Revoking a phone from the desktop app removes its persisted trust, closes its active sessions and releases its held input immediately. A restart is not required for this management action. Removing a computer from the phone only forgets that saved connection; it does not revoke desktop trust. Stop the server before manually editing state files.
+
+Desktop private keys are stored in the user's configuration directory. The mobile private identity uses platform secure storage, but the key is loaded into application memory. A process or attacker with access as the same user may be able to read keys or modify trust. State corruption fails closed. Automatic certificate renewal and multi-process coordination of shared state are not implemented.
+
+All locally enabled capabilities are available to a trusted peer after negotiation; finer per-device permissions are not implemented. Unknown connections can still consume resources during TLS and onboarding, and there is no global admission quota. Keep pairing secrets and private keys private.
+
+Native input obeys operating-system session and permission limits. Windows secure desktops and administrator apps, macOS Accessibility restrictions, and unsupported Linux sessions are not bypassed.
+
+## Report a vulnerability
+
+Email **shirishkoirala@gmail.com** with the affected version/platform, a description and reproduction steps. Do not post sensitive details in a public issue before contacting the maintainer, and never include private keys, pairing secrets or unrelated personal data.

@@ -1,5 +1,7 @@
 # Flutter validation — 14 October 2026
 
+> Historical development record. Counts, versions and pending checks below describe the original stages, not the current release. See [current validation](../VALIDATION.md), [release status](../docs/release-plan.md) and [GitHub Actions](https://github.com/shirishkoirala/linkpad/actions) for current results.
+
 Environment: macOS arm64, Flutter 3.32.5 stable, Dart 3.8.1.
 
 - `flutter analyze`: no issues found. Dart formatting is clean.

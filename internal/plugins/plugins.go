@@ -1,6 +1,6 @@
 package plugins
 
-import "example.org/linkpad/internal/protocol"
+import "github.com/shirishkoirala/linkpad/internal/protocol"
 
 // Plugin is an in-process capability boundary. No downloaded code is executed.
 type Plugin interface {

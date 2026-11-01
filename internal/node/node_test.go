@@ -2,9 +2,9 @@ package node
 
 import (
 	"crypto/tls"
-	"example.org/linkpad/internal/identity"
-	"example.org/linkpad/internal/plugins"
-	"example.org/linkpad/internal/protocol"
+	"github.com/shirishkoirala/linkpad/internal/identity"
+	"github.com/shirishkoirala/linkpad/internal/plugins"
+	"github.com/shirishkoirala/linkpad/internal/protocol"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"net/http"

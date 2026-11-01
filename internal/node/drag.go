@@ -1,7 +1,7 @@
 package node
 
 import (
-	"example.org/linkpad/internal/protocol"
+	"github.com/shirishkoirala/linkpad/internal/protocol"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"time"

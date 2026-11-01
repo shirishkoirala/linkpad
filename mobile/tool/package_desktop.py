@@ -143,7 +143,7 @@ def linux(args):
         (work / 'debian').mkdir()
         (work / 'debian/control').write_text(
             'Source: linkpad\nSection: utils\nPriority: optional\n'
-            'Maintainer: Linkpad maintainers <maintainers@linkpad.invalid>\n\n'
+            'Maintainer: Shirish Koirala <shirishkoirala@gmail.com>\n\n'
             'Package: linkpad\nArchitecture: amd64\nDescription: Linkpad desktop server\n')
         # Inspect every bundled ELF: plugins can require libraries absent from
         # the main executable. Own bundled libraries have no Debian shlibs entry.
@@ -170,7 +170,7 @@ def linux(args):
         control.write_text(
             f'Package: linkpad\nVersion: {args.version}\nArchitecture: amd64\n'
             'Section: utils\nPriority: optional\n'
-            'Maintainer: Linkpad maintainers <maintainers@linkpad.invalid>\n'
+            'Maintainer: Shirish Koirala <shirishkoirala@gmail.com>\n'
             f'Installed-Size: {size}\nDepends: {", ".join(dependencies)}\n'
             'Description: Phone touchpad and keyboard desktop server\n'
             ' Linkpad pairs with your phone over your local network.\n'

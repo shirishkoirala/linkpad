@@ -1,6 +1,6 @@
 package pointer
 
-import "example.org/linkpad/internal/protocol"
+import "github.com/shirishkoirala/linkpad/internal/protocol"
 
 type Backend struct{}
 type ScrollBackend struct{}

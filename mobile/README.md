@@ -1,41 +1,45 @@
-# Flutter controller
+# Linkpad Flutter apps
 
-Shared Android and iOS touchpad client for the existing Go desktop agent. The native Kotlin controller in `../android` remains available.
+This project contains the Android/iOS controllers and the macOS, Windows and Linux desktop apps. The standalone Kotlin Android client has been retired. The `android/` folder here is Flutter's required Android platform target, not a second app.
 
-## Run
+See the [main README](../README.md) for downloads and setup, [desktop packaging](../PACKAGING.md) for installers, and [current validation](../VALIDATION.md) for verification records.
 
-Install Flutter stable and run from this directory:
+## Development
+
+Use Flutter 3.47.7, matching CI, and the Go version in `../go.mod` for desktop helper builds. Install the native build tools for your target platform.
 
 ```sh
 flutter pub get
 flutter analyze
-flutter test
+flutter test --concurrency=1
 flutter run
 ```
 
-For Android, use Android 10/API 29 or later. For iOS, use iOS 15 or later, Xcode and a configured signing team; approve the Local Network permission prompt. Both devices must reach the desktop over the same LAN.
+Android requires API 29 or later. iOS development requires full Xcode and an appropriate signing team. The iOS deployment target is configured in the Xcode project; do not infer compatibility from older validation logs.
 
-For first-time setup, start the desktop with `-listen 0.0.0.0:4747 -pair -allow-pointer`, tap **Scan QR to pair** and scan its terminal code. Allow camera access when prompted. QR codes expire after two minutes and carry the exact certificate pin; scanning connects automatically. If camera access is unavailable, use the manual fields. Tap **Disconnect** to return to setup when already connected. For Linux X11, also use `-allow-pointer` and run the server as the logged-in desktop user.
+## Mobile connection flow
 
-Start the desktop with `-pair -allow-pointer`, enter `wss://DESKTOP-IP:4747/ws`, verify its fingerprint on the desktop, and enter the short-lived secret. Successful pairing saves the address and pin and clears the secret. Reconnect without a secret. Grant macOS Accessibility permission to enable actual mouse input. An empty capability list means pairing succeeded but pointer control is unavailable.
+The app opens the Computers chooser. Pair a nearby computer with its QR code, or enter pairing details manually. Saved computers reconnect without another secret; only one computer is controlled at a time. Local discovery can find new servers and recover a saved server after its IP address changes, while preserving certificate verification. See [saved computers](COMPUTERS.md).
 
-The client creates an EC identity certificate, stores its PEM credentials with flutter_secure_storage (Android encrypted storage / iOS Keychain), requires TLS 1.3 and checks the exact desktop certificate SHA-256 fingerprint and validity dates. Unlike the Kotlin implementation, this identity uses a software private key that is read into Dart memory, rather than a non-exportable Android Keystore signing key. This is a deliberate portability tradeoff. Uninstall/backup/keychain behavior varies by OS; loss of the identity requires re-pairing. Certificates last ten years; renewal is not implemented.
+Control sessions are foreground-only. Backgrounding or disconnecting clears pending input. Automatic recovery retries transient failures with bounded backoff; manual disconnect stops recovery. Changed certificates and rejected trust require attention rather than silently accepting a new identity.
 
-Connections are foreground-only. The app automatically connects to the last successfully saved desktop on launch. Brief interruptions retry with delays of 1, 2, 4, 8, then at most 15 seconds. Leaving the app closes the session and drops input; returning reconnects without a pairing secret. Disconnect cancels retries and resume recovery until you explicitly connect again (opening the app on a later launch restores the saved desktop).
+The input pipeline allows up to four plain movements in flight; clicks, keyboard, volume and dragging respect ordered acknowledgement barriers. Stale input expires, and adaptive stall detection pauses controls before reconnecting. See [input timing and diagnostics](INPUT-LATENCY.md) for the current limits rather than duplicating them here.
 
-Every new connection verifies the saved certificate fingerprint and renegotiates capabilities. A changed/expired certificate, rejected pairing, unpaired identity or invalid protocol response stops retries with an actionable error. Pairing secrets are used only in the explicitly requested attempt, never stored or automatically replayed. If a connection drops during first enrollment, the server might have enrolled the device before the response was lost: try connecting without a secret, or start a new pairing window if the server reports it unpaired.
+## Identity and storage
 
-Motion and clicks retain their order and allow one request awaiting acknowledgement. The input buffer is bounded and expires entries after 150 ms. A reply taking longer than 150 ms pauses input and clears the backlog; a two-second response timeout reconnects. A heartbeat every 15 seconds detects idle failures. Disconnect and backgrounding also clear all pending input. Already transmitted input cannot be recalled, so an action executed before a lost acknowledgement is never retried. No discovery or background control is included.
+The client creates an EC certificate and stores private credentials using platform secure storage. It requires TLS 1.3, verifies the exact desktop certificate SHA-256 fingerprint and checks certificate dates. This is a software private key loaded into Dart memory; it is not a hardware-backed signing key.
 
-## Build
+Pairing secrets are single-use, expire after two minutes and are not saved. Both device clocks must be correct. Loss of a private identity requires pairing again; secure-storage and backup retention varies by platform. Automatic certificate renewal is not implemented.
+
+## Builds
 
 ```sh
-flutter build apk --debug
-flutter build ios --simulator --debug
-# Physical iPhone: configure signing in ios/Runner.xcworkspace, then:
-flutter build ios --release
+flutter build apk --release
+flutter build appbundle --release
+flutter build ipa --release
+flutter build macos --release
+flutter build windows --release
+flutter build linux --release
 ```
 
-Platform builds and hardware pairing must be validated separately. Simulator builds do not establish signing or actual iPhone connectivity.
-
-Touchpad gestures: one-finger tap clicks left; a brief two-finger tap clicks right. Moving a finger, holding longer than 300 ms, or cancelling a contact does not click. Complete click buttons remain available.
+Build on the target's supported host. Android release signing is managed manually by the maintainer. iOS distribution requires Apple signing. Desktop builds bundle the Go helper automatically; packaging/signing instructions are in [PACKAGING.md](../PACKAGING.md). No release build alone establishes store or signing readiness.

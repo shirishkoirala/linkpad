@@ -1,4 +1,4 @@
-module example.org/linkpad
+module github.com/shirishkoirala/linkpad
 
 go 1.26.5
 

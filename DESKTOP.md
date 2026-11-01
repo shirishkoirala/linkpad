@@ -1,222 +1,81 @@
 # Linkpad desktop app
 
-For Mac DMG and Linux Debian installers, see [PACKAGING.md](PACKAGING.md).
+The shared Flutter app provides a graphical desktop server for macOS, Windows and Linux. It bundles the Go helper, so installed users do not need Go or a terminal. Get installers from [GitHub Releases](https://github.com/shirishkoirala/linkpad/releases/latest); see [PACKAGING.md](PACKAGING.md) for installer builds and signing requirements.
 
-The Flutter project in `mobile/` now has desktop server screens for macOS and
-Linux. Android and iOS continue to open the mobile controller. The desktop app
-bundles the existing Go server; users do not need Go or a terminal to run a built
-application.
+## Setup and use
 
-## Use
+1. Install and open Linkpad. Quit any older GUI, command-line server or system service using port 4747 first.
+2. Complete **Enable control → Connect phone → Try it**. Keep both devices on the same reachable local network; Ethernet on the computer is supported.
+3. Open Computers on the phone. Pair a nearby server by scanning the QR code displayed on the desktop, or enter verified pairing details manually.
+4. Confirm input works. The final setup test uses received input and your confirmation; **Test later** defers it.
 
-1. Open **Linkpad**. It starts a LAN listener on TCP 4747.
-2. Choose **Create pairing code**, then scan it from Linkpad on your phone.
-   Keep the phone and computer on the same reachable network.
-3. A code is single-use and expires after two minutes. **Cancel pairing** closes
-   enrollment immediately. Creating another code replaces the previous one.
-4. **Your phones** shows live connection status. Its menu can rename a phone or
-   revoke its access. Revocation disconnects all sessions for that identity and
-   removes its trust on disk. The phone must pair again afterward.
+Codes are single-use and expire after two minutes. Cancelling or replacing an invitation invalidates it. Keep both clocks correct. Existing trusted phones can reconnect without new pairing codes and do not restart onboarding.
 
-On macOS, enable Linkpad in **System Settings → Privacy & Security →
-Accessibility**, then choose **Restart server** in the app. macOS may identify the
-bundled `linkpad-server` helper or its responsible application in the permission
-list. Input permissions are checked at server startup and during guided recovery;
-first-install pairing waits for working input access. Rebuilding or moving an ad-hoc signed app can require granting
-permission again. For regular use, keep the app in a stable location such as
-Applications.
+**Your phones** shows connection status. You can rename a phone, disconnect it or revoke its access. Revocation removes trust and disconnects its active sessions immediately; it must pair again afterward.
 
-Linux input requires a logged-in **X11** desktop session. Open Linkpad from that
-session so it inherits `DISPLAY` and `XAUTHORITY`. Wayland and the login screen
-are unsupported. The permission panel shows the Go backend's actual diagnostic.
+### macOS
 
-Close the window to keep the server in the tray/menu bar. **Open Linkpad** brings
-it back; **Quit Linkpad** stops the server and releases held input. If tray
-initialization fails, closing quits instead. Some GNOME installations need an
-AppIndicator extension to display tray icons; reopening Linkpad from the launcher
-also restores the existing Linux window. Minimizing keeps the app running.
+Install into Applications before granting Accessibility access. A mounted DMG or translocated launch prompts you to move the app first.
 
-**Start at login** is opt-in and uses the operating system's login mechanism.
-On Linux it creates `~/.config/autostart/Linkpad.desktop`; on macOS it registers
-the app with login items using ServiceManagement (macOS 13+). Move/install the app to its permanent location before
-enabling this. Do not also run the terminal server or a Linkpad systemd service
-on port 4747. The app reports a conflict instead of taking over another process.
-To replace the user service described in `LINUX-SERVICE.md`, stop and disable that
-service first, then enable the desktop app's login setting.
+Enable Linkpad under **System Settings → Privacy & Security → Accessibility**, then return to the app and choose **Check access** if needed. Linkpad refreshes helper capabilities when possible. If macOS needs a new application process, the recovery panel offers **Restart Linkpad**. Pairings are preserved. Replacing or moving an ad-hoc signed app can require granting permission again.
 
-For several network interfaces, **Use a different network address** generates
-a code using an explicit `wss://LAN-IP:4747/ws` address. It does not change the
-listener or firewall rules. **Copy diagnostics** includes recent backend errors,
-but excludes pairing invitations and secrets.
+### Windows
 
-## First installation
+Use the per-user x86_64 installer, then open Linkpad from the Start menu. The helper runs without a separate console window and communicates with the app over private pipes. Run in your normal logged-in desktop session.
 
-New installations show **Enable control → Connect phone → Try it**. On macOS,
-use **Open Accessibility settings**, enable Linkpad (or its responsible helper),
-and return. Linkpad rechecks actual access and refreshes its helper capabilities
-when needed. Setup from a mounted DMG first asks you to install in Applications.
-On Linux, working X11 sessions proceed directly to pairing; session/input errors
-receive Linux-specific recovery steps.
+Allow Linkpad on the Private network if Windows Firewall asks. The installer does not add firewall rules or require administrator access. Secure lock/UAC desktops cannot be controlled, and administrator apps may reject input from a standard-permission server. See [Windows input](docs/windows-input.md) for details and verification records.
 
-The final test requires remote input activity and your confirmation that control
-works. **Test later** leaves the test deferred, with a **Test controls** action on
-the dashboard. **Start Linkpad when I sign in** is optional. Setup completion is
-stored in `desktop-setup.json` alongside desktop phone names, never with QR
-secrets. Existing trusted phones bypass fresh-install setup; ordinary reconnects
-do not restart onboarding. See `FIRST-RUN-UX.md` for details and physical-device
-validation requirements.
+### Linux
 
-## Build on macOS
+Use a logged-in **X11/Xorg** session. Launch the app from the application menu, or from a terminal with the correct `DISPLAY` and `XAUTHORITY`. Wayland and login-screen input are not supported. The permission panel shows actual backend diagnostics and recovery guidance.
 
-Install Flutter, Go 1.26+, Xcode, and CocoaPods. From `mobile/`:
+The packaged x86_64 build targets Ubuntu 24.04 / Linux Mint 22-compatible systems. Other distributions need compatible runtime libraries or a source build.
+
+## Tray and startup
+
+Closing the window keeps the server running when a tray/menu-bar host is available. **Open Linkpad** restores the window; **Quit Linkpad** stops the helper and releases held input. If tray initialization fails, closing the window quits instead. Some Linux desktops require an AppIndicator extension; minimizing keeps the app running when no tray is available.
+
+Start-at-login is optional. Install into a stable location before enabling it. Windows uses the current user's startup registration, macOS uses login items, and Linux uses an autostart desktop entry. Turn off start-at-login before uninstalling. Do not enable another Linkpad service on the same port; see [LINUX-SERVICE.md](LINUX-SERVICE.md) if migrating from a Linux service.
+
+## Network discovery and pairing
+
+The app starts a LAN listener on TCP 4747. Local advertisements use `_linkpad._tcp` with a public certificate fingerprint and listener port. Phones can list nearby servers or recover saved connections after an IP change, but must still verify the pinned certificate. Advertisements refresh when interfaces change and stop with the server.
+
+Tap **Pair** on a nearby computer from the phone to request that the desktop reveal its QR code. Existing active codes are reused; requests are rate-limited and return no secret or access grant. This does not wake a sleeping PC or start a stopped server. Headless servers and older versions retain manual QR creation.
+
+If automatic address selection chooses the wrong interface, **Use a different network address** creates a QR with an explicit `wss://LAN-IP:4747/ws` endpoint. It does not change the listener or firewall. Guest-network isolation or blocked multicast may require manual pairing details. Do not delete trusted identity merely because DHCP changed the address.
+
+## Controls
+
+Native backends provide cursor movement, complete clicks, leased dragging, scrolling, keyboard input, the standalone Windows/Command key and volume controls. Capabilities are negotiated; unsupported or older receivers leave the corresponding controls disabled. Hold volume up/down to repeat; repeats are skipped while the connection is busy, and mute is single-shot.
+
+## Build and package
+
+From `mobile/`, use the target's supported host:
 
 ```sh
 flutter pub get
 flutter build macos --release
-open build/macos/Build/Products/Release/Linkpad.app
-```
-
-The Xcode embed phase runs `tool/build_server.sh` before signing the app. It
-compiles and signs `Contents/Resources/linkpad-server` with matching app
-architectures. The app uses bundle ID `com.shirishkoirala.linkpad`, a separate identity
-from the mobile controller. The macOS desktop target is intentionally outside
-App Sandbox so the helper can use desktop input and the existing server state.
-Public distribution still needs appropriate signing and notarization; the local
-ad-hoc build is for development.
-
-## Build on Linux x86_64
-
-Build on Linux; Flutter cannot produce a Linux GUI bundle from macOS. Install
-Flutter, Go 1.26+, and native build dependencies, for example on Ubuntu:
-
-```sh
-sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
-  libsecret-1-dev libjsoncpp-dev libayatana-appindicator3-dev
-cd mobile
-flutter pub get
+flutter build windows --release
 flutter build linux --release
-./build/linux/x64/release/bundle/linkpad_controller
 ```
 
-CMake compiles the Go helper and installs it into the bundle's `lib/` directory.
-Distribute the **whole bundle directory**. Keep it at a stable path for autostart.
-This GUI bundle requires the listed system libraries and a graphical session;
-it differs from the existing standalone, statically linked Go server download.
+Build only the relevant target on each machine. Native build tooling and Go are required. macOS bundles `Contents/Resources/linkpad-server`, Windows places `linkpad-server.exe` beside `Linkpad.exe`, and Linux places `linkpad-server` in the bundle's `lib/` directory. Distribute the complete bundle or use the installers described in [PACKAGING.md](PACKAGING.md).
 
-## Container validation on macOS or Linux
-
-With Docker running, from the repository root:
+For Linux container verification on a Mac or Linux Docker host, from the repository root:
 
 ```sh
 python3 mobile/tool/test_linux_container.py
 ```
 
-The helper stages only application sources in a temporary build context, builds
-for `linux/amd64`, then runs Go's X11 integration tests against an isolated Xvfb
-display, Flutter tests, linked-library checks, and a real GTK app startup/shutdown
-smoke test. No host display, pairing state, or server port is mounted/published.
-The first run downloads the pinned Flutter and Go SDK images.
+The tool stages source files into a temporary context, builds Linux x86_64, and runs isolated Xvfb input checks, Flutter tests and GTK helper lifecycle checks. It does not mount the host display or pairing state. Results go under `bin/linux-container-test/`; container results do not replace physical desktop testing.
 
-Test logs and `Linkpad-Linux-x86_64-desktop.tar.gz` go in
-`bin/linux-container-test/`. Extract the archive on Linux and run
-`./linkpad_controller`; keep its `lib/` and `data/` folders alongside it.
-The container's Ubuntu 24.04 base targets glibc 2.39 or newer and still requires
-the desktop runtime libraries on the destination machine. A successful virtual
-display test does not validate a physical machine's tray host, login mechanism,
-firewall, or network reachability.
+## Helper lifecycle and state
 
-## State and lifecycle
+The GUI starts its bundled helper with `-desktop -listen 0.0.0.0:4747 -allow-pointer`. Management commands and status use private stdin/stdout pipes. The network pairing-display endpoint can only request that a QR be shown; it cannot read pairing secrets or administer trust.
 
-The helper uses the same default private server state directory as the CLI:
-`~/Library/Application Support/linkpad` on macOS, or the user configuration
-directory's `linkpad` folder on Linux. Existing server identity and pairings carry
-over. Run only one server per state directory. Phone display names are separate
-Flutter application data and do not change certificate identities.
+The helper uses the same default server state directory as the CLI: the user's configuration directory under `linkpad` (on macOS, `~/Library/Application Support/linkpad`). Existing server identities and trusted phones carry over. Run one server per state directory. UI preferences, phone display names and onboarding completion are stored separately from the private server identity.
 
-Flutter starts a child with `-desktop -listen 0.0.0.0:4747 -allow-pointer`. Commands
-and status travel over private stdin/stdout pipes, with no network administration
-API. Pairing secrets stay in memory. Closing the parent's pipe stops the listener
-and releases active drags. Quit waits for graceful shutdown and escalates to
-process termination only if the child fails to stop. A crashed helper is shown
-as stopped and can be started again from the window or tray.
+Closing the parent pipe stops the listener and releases active drags. Quit waits for shutdown and escalates only if the helper fails to stop. A crashed helper is shown as stopped and can be restarted. For development only, `LINKPAD_SERVER_BINARY` overrides the bundled helper path.
 
-For development only, `LINKPAD_SERVER_BINARY=/absolute/path/to/linkpad` overrides
-the bundled executable. It must be a build that supports `-desktop`.
-
-## Validation
-
-```sh
-go test -race ./...
-go vet ./...
-go build -o bin/linkpad-desktop-test ./cmd/linkpad
-cd mobile
-flutter analyze
-flutter test
-LINKPAD_DESKTOP_TEST_BINARY="$PWD/../bin/linkpad-desktop-test" \
-  flutter test test/server_controller_test.dart
-```
-
-Go integration tests exercise real TLS pairing, code rotation/cancellation,
-active-session revocation, durable trust removal, and shutdown on parent EOF.
-Flutter tests cover desktop enrollment, confirmation before revocation, minimum
-window layout, and real helper lifecycle/port cleanup on an isolated test port.
-The Go backend remains shared with the existing CLI and mobile protocol.
-
-Verified locally on macOS: release build, deep signature verification, server startup, existing phone trust, QR generation, and reading login-item status. The iOS release build also passes.
-
-Linux x86_64 container validation passes using Ubuntu 24.04, Flutter 3.44.0 / Dart 3.12.0, and Go 1.26.5: release GUI build, 68 Flutter tests, Go race tests including X11 input integration, static analysis, shared-library resolution, GTK startup with the bundled helper, and listener cleanup on parent termination. A physical Linux desktop still needs its own tray, login, and network checks.
-
-Login-item registration was left disabled during validation. macOS input requires the user to grant Accessibility permission to the current signed build.
-
-## Local discovery and changed addresses
-
-Updated servers advertise `_linkpad._tcp` on the local network using only their
-public certificate fingerprint and listener port. Updated phones keep trying the
-saved address and can rediscover the same paired identity if DHCP changes its IP.
-The actual TLS certificate must still match before a new address is saved; no new
-pairing token is sent and saved computer names are preserved.
-
-The server refreshes advertisements when interface addresses change and withdraws
-them on shutdown. Discovery failure does not stop ordinary QR/manual connections.
-On iPhone, allow Linkpad under Settings > Privacy & Security > Local Network.
-Networks that isolate clients or block multicast may require scanning a fresh QR
-or updating the manual address; do not delete a pairing just because its IP changed.
-Old servers must be upgraded to advertise discovery. The update does not change
-router settings, and it does not provide remote/cloud discovery.
-
-### Nearby computers
-
-The phone lists unpaired LAN servers under **Nearby computers** and refreshes while
-the chooser is open. Saved computers stay in the saved list. Forgetting an entry
-makes that identity eligible for nearby discovery again. Select **Pair**, then
-scan a fresh QR code on that computer or verify its fingerprint and enter its
-pairing secret manually. Discovery alone never grants control.
-
-### Request a QR from your phone
-
-Tap **Pair** beside a nearby computer to ask an updated desktop app to display
-its QR code. Linkpad raises its window and reveals the code. Existing active
-codes are reused; repeated requests are limited to one every ten seconds. The
-request never returns a pairing secret or grants access: scan the desktop QR
-or verify the fingerprint and enter its secret manually to pair.
-
-Both apps need this update. Older desktops and headless servers retain manual
-QR creation. The request does not start a stopped server or wake a sleeping PC.
-
-### Remote volume controls
-
-Remote has Volume down, Mute, and Volume up instead of modifier buttons. Keyboard
-retains Ctrl, Alt, Shift, and Win/Command. Both phone and server need this update;
-older servers leave the volume row disabled. These buttons send system media keys
-on macOS and Linux X11, using the desktop’s normal volume steps and mute toggle.
-
-Hold Volume up/down to repeat; release or disconnect stops repeats. Repeats skip
-busy connections so they do not queue a delayed audio burst. Mute is single-shot.
-
-### Applying Accessibility changes on macOS
-
-If Accessibility is enabled but input remains unavailable, return to Linkpad and
-choose **Check access**. A restart prompt offers **Restart Linkpad** when a fresh
-application process may be needed. The action closes the old server before
-reopening the app, preserving pairings and allowing phones to reconnect. If the
-relaunch fails, Linkpad restores its server and offers manual recovery.
+**Copy diagnostics** includes backend errors and connection state while excluding pairing invitations and secrets. See [VALIDATION.md](VALIDATION.md) for test history and [the release plan](docs/release-plan.md) for remaining installation and signing checks.

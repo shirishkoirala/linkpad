@@ -2,8 +2,8 @@ package node
 
 import (
 	"errors"
-	"example.org/linkpad/internal/plugins"
-	"example.org/linkpad/internal/protocol"
+	"github.com/shirishkoirala/linkpad/internal/plugins"
+	"github.com/shirishkoirala/linkpad/internal/protocol"
 	"github.com/gorilla/websocket"
 	"sync"
 	"testing"

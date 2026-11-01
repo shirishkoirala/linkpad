@@ -1,121 +1,143 @@
-# Linkpad (placeholder name)
+# Linkpad
 
-An MIT-licensed, local-first device connectivity experiment inspired by KDE Connect and Unified Remote. No accounts or cloud service. This is a first working vertical slice, not a production-ready replacement.
+Use your phone as a touchpad, keyboard and remote for your computer.
 
-## Implemented
+Linkpad connects an Android phone or iPhone to a Mac, Windows or Linux computer over your local network. No account or cloud service is required. The mobile controller and desktop app share a Flutter codebase; a bundled Go server handles pairing and native input.
 
-- Go peer identity persisted as an ECDSA P-256 self-signed certificate; TLS 1.3 WebSocket connections and explicit addresses.
-- Mutual TLS proof of identity, mandatory controller-side server fingerprint verification, a single-use 256-bit pairing secret with a two-minute window, persistent desktop trust, reconnect and capability negotiation.
-- An in-process plugin interface and registry. Pointer plugin available only when opted in and supported by the host.
-- Native macOS cursor movement and left/right click through CoreGraphics, gated by Accessibility permission. Linux X11 input uses a pure-Go authenticated XTEST connection for relative movement, clicks, wheel scrolling and arrow keys. Windows input uses SendInput in an interactive desktop session; see [Windows input](docs/windows-input.md). macOS builds without cgo remain unavailable stubs.
-- Flutter Android/iOS controller in `mobile/`, with shared pairing, certificate pinning, touchpad and foreground-only sessions. Flutter uses a software EC identity protected by platform secure storage.
-- Go integration/security tests, Flutter controller tests, protocol JSON Schema, CI and build instructions.
+## Downloads
 
-## Pair by scanning a QR code
+Get desktop installers from the [latest GitHub Release](https://github.com/shirishkoirala/linkpad/releases/latest). Older builds remain available on the [Releases page](https://github.com/shirishkoirala/linkpad/releases).
 
-Start the desktop agent with a reachable LAN listener and a new pairing window:
+| Platform | Installer | Requirements |
+| --- | --- | --- |
+| macOS | `Linkpad-<version>-macos-local.dmg` or signed `macos.dmg` | Accessibility permission for input control |
+| Windows | `Linkpad-<version>-windows-x86_64-setup.exe` | 64-bit Intel/AMD Windows with an unlocked desktop session |
+| Linux | `linkpad_<version>_amd64.deb` | Ubuntu 24.04 / Linux Mint 22-compatible x86_64 system using X11 |
 
-```sh
-# macOS
-./bin/linkpad -listen 0.0.0.0:4747 -pair -allow-pointer
-# Linux X11: run from a terminal in your desktop session
-./linkpad-linux-x86_64 -listen 0.0.0.0:4747 -pair -allow-pointer
-```
+The `amd64` Linux package works on both Intel and AMD 64-bit processors. ARM Linux packages are not currently built.
 
-In the Flutter phone app, tap **Scan QR to pair**, allow camera access, and scan the code shown directly on your computer. The app fills the connection details and pairs automatically. The QR is single-use and expires in two minutes. To show the scanner when already connected, tap **Disconnect** first. After pairing, reconnects use the saved identity without scanning again.
+Current `macos-local` DMGs are ad-hoc signed and **not notarized**. The Windows installer is currently **unsigned**, so Windows may show a publisher or SmartScreen warning. Download only from the project releases; do not disable operating-system security protections. SHA-256 files accompany each installer to check download integrity.
 
-Use `-pair-qr /path/to/new-pairing.png` to also create a private PNG if your terminal cannot display the code cleanly; the path must not already exist. Use `-advertise wss://YOUR-LAN-IP:4747/ws` if the server selects the wrong network interface. Both devices must be able to reach the advertised address. Manual pairing remains available. See [protocol/pairing.md](protocol/pairing.md) for the payload and trust model.
+Android and iOS controllers are prepared for Google Play and the App Store. For mobile availability, installation help and desktop setup, visit [Linkpad Support](https://shirishkoirala.com/linkpad-support/).
 
-## Desktop: build and run
+## Get connected
 
-For the Flutter desktop server app (QR pairing, live phone list, tray controls,
-and start at login), see [DESKTOP.md](DESKTOP.md). The terminal server below
-remains available. Run one of them at a time on port 4747.
+1. Install and open the desktop app. Quit any older Linkpad app or terminal server first.
+2. Connect your phone and computer to the same reachable local network. The computer can use Ethernet while the phone uses Wi-Fi.
+3. Complete the desktop setup and enable input control as prompted.
+4. Open **Computers** on your phone, select the nearby computer and scan its pairing QR code. You can also enter pairing details manually.
+5. Use **Touchpad**, **Remote** or **Keyboard** to control the computer.
 
-Requirements: Go 1.26+, macOS Xcode Command Line Tools for the native backend. Module path `example.org/linkpad` is a placeholder; no repository or release has been published. Initial dependency downloads need internet; runtime requires only a reachable local network.
+Allow camera access for QR scanning and Local Network access on iOS. Pairing codes are single-use and expire after two minutes. Keep both devices' clocks correct; an incorrect clock can make a fresh code appear expired.
 
-```sh
-go test -race ./...
-go vet ./...
-go build -o bin/linkpad ./cmd/linkpad
-./bin/linkpad -listen 192.168.1.10:4747 -pair -allow-pointer
-```
+Saved computers reconnect without another QR scan. Local discovery can recover a paired computer's address after its IP changes, while still verifying the saved certificate identity. Discovery does not grant access to an unpaired device.
 
-Use your desktop LAN address; the default listen address is loopback. Allow inbound TCP 4747 in your firewall. Grant the executable/launching terminal Accessibility access in **System Settings → Privacy & Security → Accessibility**, then restart. The startup message reports if the backend is unavailable. Pairing still works without pointer permission.
+### Desktop permissions
 
-The terminal prints a device fingerprint and one pairing secret. Verify the fingerprint directly on the desktop, then enter both in Android. Do not obtain the fingerprint from the same untrusted network connection you are trying to authenticate. Keep the terminal secret private; whoever possesses it and a matching server pin during the window can enroll a device.
+- **macOS:** enable Linkpad under **System Settings → Privacy & Security → Accessibility**. Restart Linkpad if access remains unavailable after changing permission; the app provides a restart prompt when needed.
+- **Windows:** run Linkpad in your logged-in desktop session. Allow access on your **Private** network if Windows Firewall asks. Lock screens and UAC secure desktops cannot be controlled; standard-permission Linkpad cannot control administrator apps.
+- **Linux:** use an **X11/Xorg** desktop session and launch Linkpad as your normal desktop user. Wayland and headless console input are not supported. Terminal launches need the desktop session's `DISPLAY` and, where required, `XAUTHORITY`.
 
-The state directory defaults to the user configuration folder (`~/Library/Application Support/linkpad` on macOS). Override it with `-state`. Keep it private: `identity.pem` contains the private key, `peers.json` lists trusted certificate fingerprints. Stop the node before editing trust; remove a peer fingerprint from `peers.json` and restart to revoke it. Revocation is not live. Losing/deleting a client identity requires pairing again. Deleting the desktop identity changes its pin and requires all clients to verify and pair again. Certificates expire after ten years; rotation is not implemented.
+The desktop server listens on TCP **4747**. Guest Wi-Fi, client isolation, firewalls or blocked multicast can prevent connection or discovery. Manual pairing remains available when discovery is blocked.
 
-### Two desktop peers / smoke test
+## Controls
 
-No mouse movement is performed by pairing alone. The second peer uses a separate persistent state directory:
+- **Touchpad:** relative cursor movement, tap to click, two-finger tap for right-click, and two-finger scrolling. Hold the left-click control while moving to drag windows or select items.
+- **Keyboard:** text input, navigation keys and shortcuts with Ctrl, Alt, Shift and Windows/Command. Windows text input supports Unicode; Linux characters must be available in the active X11 keyboard layout.
+- **Remote:** directional pad, Enter, navigation shortcuts and volume down/mute/up on supported desktop sessions.
+- **Settings:** cursor sensitivity, optional keep-screen-awake behavior and remembered control tabs.
+- **Computers:** saved computers, nearby discovery and switching between paired computers.
 
-```sh
-# Terminal 1 (use -allow-pointer only when testing actual input)
-./bin/linkpad -state .state-server -listen 127.0.0.1:4747 -pair
-# Terminal 2: copy the fingerprint and secret from terminal 1
-read -r LINKPAD_PAIR_TOKEN
-export LINKPAD_PAIR_TOKEN
-./bin/linkpad -state .state-controller -connect wss://127.0.0.1:4747/ws -pin <desktop-fingerprint>
-unset LINKPAD_PAIR_TOKEN
-# Reconnect after enrollment; no pairing secret needed
-./bin/linkpad -state .state-controller -connect wss://127.0.0.1:4747/ws -pin <desktop-fingerprint>
-```
+The desktop app includes QR pairing, connected-device management, tray/menu-bar controls and optional start-at-login. Closing the window keeps the server running when the tray is available; use **Quit Linkpad** to stop it. Installation does not enable start-at-login automatically.
 
-For a receiver started with an available `-allow-pointer` backend, add `-dx 20 -dy 10` or `-click left` to the controller command. The CLI exits after negotiating/sending one action. Each invocation is a new authenticated connection.
+Linkpad sends input commands; it does **not** stream the computer's screen. Internet relay, clipboard sync, file transfer and notification mirroring are not implemented. Mobile control sessions pause while the app is inactive. Linux scrolling uses wheel events rather than macOS-style pixel scrolling.
 
-## Mobile: build and run
+## Privacy and pairing
 
-The `mobile/` Flutter project is the maintained Android and iOS controller. See [mobile/README.md](mobile/README.md) for setup, platform requirements and secure-storage details. The original standalone Kotlin Android client has been retired; `mobile/android/` remains required for Flutter Android builds.
+Connections use TLS 1.3 with mutual certificate authentication. Initial pairing verifies the desktop certificate fingerprint and a short-lived secret; subsequent connections verify the saved identity. Private identities and saved pairing information remain on the user's devices. The mobile app uses platform secure storage for its private authentication material.
+
+Keep QR codes, pairing secrets and private keys private. Removing or replacing a desktop identity requires pairing again. Review the [privacy policy](https://shirishkoirala.com/linkpad-privacy/), [security notes](SECURITY.md) and [pairing protocol](protocol/pairing.md) for more detail.
+
+## Build from source
+
+Use the Go version specified in [go.mod](go.mod) and Flutter **3.47.7**, matching CI. Install the platform build tools: Xcode for Apple platforms, Android SDK and a compatible JDK for Android, Visual Studio's C++ desktop workload for Windows, or GTK/CMake/Ninja development packages for Linux. See [PACKAGING.md](PACKAGING.md) for desktop dependencies and installer tooling.
+
+### Flutter apps
 
 ```sh
 cd mobile
 flutter pub get
 flutter analyze
-flutter test
-flutter run
+flutter test --concurrency=1
 ```
 
-For an Android APK, run `flutter build apk --release` from `mobile/`. iOS builds require full Xcode and appropriate signing. Pair with the desktop on the same reachable LAN using the app's QR scanner or manual pairing details.
-
-## Linux X11 desktop control
-
-The Linux x86_64 executable supports mouse movement, left/right click, two-finger wheel scrolling, D-pad arrow keys, and keyboard text/shortcuts through the XTEST extension. It is statically linked and does not require `xdotool`, root, `/dev/uinput`, or disabling X server access control. Keyboard characters must be available in the active X11 keyboard layout.
-
-The mobile Control deck keeps a full touchpad above click and arrow controls. Tap **Keyboard** to open the QWERTY keyboard beneath a smaller touchpad. Shift, Ctrl, Alt, and Super apply to the next key only; Super maps to Command on macOS. **Gestures** shows the touch controls. The app follows the phone's light/dark appearance, and manual pairing details are under **Enter pairing details**. Update the desktop server as well as the phone app to enable the negotiated `keyboard.v1` capability; older servers still support the existing pointer and arrow controls.
-
-Run from a terminal inside the logged-in X11 desktop session, as that same user:
+Build the target you need from `mobile/`:
 
 ```sh
-echo "$XDG_SESSION_TYPE"  # should say x11
-./linkpad-linux-x86_64 -listen 0.0.0.0:4747 -allow-pointer
+flutter build macos --release
+flutter build windows --release
+flutter build linux --release
+flutter build appbundle --release
+flutter build ipa --release
 ```
 
-For first-time enrollment, also add `-pair`. `DISPLAY` and, when required by the desktop, `XAUTHORITY` are inherited from that session. A headless SSH shell without those credentials cannot control the desktop. The startup log explains missing DISPLAY, X11 authorization failures or a missing XTEST extension. Correct the environment and restart the server if input is unavailable. Pairing still works without input support.
+Run each build on its supported host platform. Desktop builds bundle the Go helper automatically. Google Play and App Store uploads require the appropriate release signing; a successful local build alone does not establish store readiness.
 
-X11 core wheel events use discrete notches: small touch deltas accumulate until 40 pixels, then emit a complete wheel press/release. Leftover scroll is discarded after 150 ms of inactivity. This provides natural-direction scrolling, but not macOS-style pixel scrolling or momentum. Wayland and headless console control remain unsupported.
+### Command-line desktop server
 
-## Repository map
+The terminal server remains available alongside the graphical app:
 
-- `cmd/linkpad`: executable, listen/connect modes and permissions.
-- `internal/identity`: identity creation and exact TLS pinning.
-- `internal/node`: WebSocket sessions, pairing and trust persistence.
-- `internal/protocol`, `protocol/`: wire types, schema and specification.
-- `internal/plugins`, `internal/pointer`: modular capability interface and native/stub backend.
-- `mobile/`: shared Flutter Android/iOS controller and TLS integration tests.
-- `.github/workflows/ci.yml`: Go race tests/vet, cross-platform stub builds, and macOS native build. Flutter Android/iOS checks live in `.github/workflows/flutter.yml`.
+```sh
+go test -race ./...
+go vet ./...
+go build -o bin/linkpad ./cmd/linkpad
+./bin/linkpad -listen 0.0.0.0:4747 -pair -allow-pointer
+```
 
-## Locally built artifacts
+On Windows:
 
-Desktop installers are built under `bin/releases/`. Flutter Android APKs are built under `mobile/build/app/outputs/flutter-apk/`. Build outputs are ignored by Git; use the platform build instructions above.
+```powershell
+go build -o linkpad-windows-x86_64.exe ./cmd/linkpad
+.\linkpad-windows-x86_64.exe -listen 0.0.0.0:4747 -pair -allow-pointer
+```
 
-## Incomplete / limits
+Only run one server on the same port. The default CLI listener is loopback; a phone needs a reachable LAN listener. Use `-advertise wss://YOUR-LAN-IP:4747/ws` if the automatically selected address is unsuitable. `-pair-qr PATH` saves a private QR PNG to a new file. `-state PATH` selects a separate server state directory; do not share or commit its private key.
 
-Explicit address only: no mDNS/discovery, background mobile service, file sharing, clipboard, notification sync, remote screen or internet relay. Android currently only controls, not receives. The Go process can act as either peer but does not provide a tray UI or multiplex bidirectional plugin families. Pointer authorization is global for all paired peers; per-device permissions, live revocation, audit UI, handshake admission limits and global event quotas remain work. Plugin modules are compiled into the agent; no third-party package loader or sandbox exists. A compromised paired device can operate the pointer while that capability is enabled. Local key storage uses OS file permissions on desktop, not a hardware keystore. Run a single agent process per state directory; trust files are not multi-process coordinated. This is not security audited.
+## Release pipeline
 
-See [VALIDATION.md](VALIDATION.md) for checks actually run and hardware verification still needed. Do not treat configured CI as a completed remote run.
+[Desktop release](.github/workflows/desktop-release.yml) builds macOS, Linux x86_64 and Windows x86_64 installers on native GitHub runners. It runs Go race tests/vet, Flutter analysis/tests and an installed Windows GUI/helper smoke test. The Windows input backend also has a native CI smoke test.
 
-## Contributing
+To create a release:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and [protocol/README.md](protocol/README.md). Branding and hosting are undecided; Linkpad and the module/application IDs are provisional.
+1. Set `mobile/pubspec.yaml` to the intended version, for example `0.1.1+2`, then commit and push it.
+2. Create and push the matching tag, for example `v0.1.1`. Omit the `+build` suffix from the tag.
+3. Actions builds the installers, verifies checksums and creates a **draft GitHub Release**.
+4. Review the artifacts and notes, complete physical installation checks, then publish the draft.
+
+Manual runs from **Actions → Desktop release → Run workflow** produce artifacts by default. Select **Create/update a draft release** when wanted. A published release cannot be overwritten, and an existing draft from another commit must be removed or replaced with a new version before retrying. Keep a correctly created tag when removing an obsolete draft.
+
+See [PACKAGING.md](PACKAGING.md) for artifact locations, signing/notarization secrets and local packaging. Public Mac signing/notarization and Windows code signing remain separate release requirements.
+
+## Project and testing
+
+| Path | Purpose |
+| --- | --- |
+| `mobile/` | Flutter mobile controllers and desktop apps |
+| `cmd/linkpad/` | Go server and command-line controller |
+| `internal/pointer/` | macOS CoreGraphics, Windows SendInput and Linux XTEST input backends |
+| `internal/node/` | Sessions, pairing, trusted devices and input coordination |
+| `internal/identity/` | Private identities and TLS certificate pinning |
+| `protocol/` | Message schemas and capability specifications |
+| `assets/release/` | Store descriptions, promotional graphics and screenshot assets |
+| `.github/workflows/` | Automated tests, builds and desktop release workflow |
+
+See [VALIDATION.md](VALIDATION.md) for test history, [Windows input](docs/windows-input.md) for native and Docker/Wine test details, and the [release plan](docs/release-plan.md) for outstanding work. Docker checks do not replace physical desktop testing.
+
+## Support and contributing
+
+- [Setup and support](https://shirishkoirala.com/linkpad-support/)
+- [Report an issue](https://github.com/shirishkoirala/linkpad/issues)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+
+Linkpad is available under the [MIT License](LICENSE).

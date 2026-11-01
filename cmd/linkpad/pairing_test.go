@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"example.org/linkpad/internal/identity"
-	"example.org/linkpad/internal/node"
-	"example.org/linkpad/internal/pairingqr"
+	"github.com/shirishkoirala/linkpad/internal/identity"
+	"github.com/shirishkoirala/linkpad/internal/node"
+	"github.com/shirishkoirala/linkpad/internal/pairingqr"
 	"flag"
 	"image/png"
 	"io"

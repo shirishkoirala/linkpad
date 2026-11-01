@@ -26,4 +26,4 @@ Computer identity is its verified certificate fingerprint. Pairing again with th
 
 If saved data cannot be read, the app displays a warning and does not overwrite it. If a write fails, current changes remain available in memory and **Try again** retries saving them.
 
-This feature does not add nearby-device discovery or require a desktop-server update.
+Nearby computers are discovered separately from saved trust. Selecting a discovered server still requires QR/manual pairing; discovering a saved identity after an address change still requires its pinned certificate. See [the mobile guide](README.md) and [desktop setup](../DESKTOP.md).

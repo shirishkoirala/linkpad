@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.org/linkpad/protocol/v1/message.schema.json",
+  "$id": "https://raw.githubusercontent.com/shirishkoirala/linkpad/master/protocol/v1/message.schema.json",
   "title": "Linkpad v1 message",
   "type": "object",
   "required": [
