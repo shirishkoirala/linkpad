@@ -6,6 +6,8 @@ Updated: 30 October 2026
 
 1 November 2026: Android and iOS release steps are complete, as reported by the maintainer. Public store availability has not been independently verified. Desktop distribution through GitHub Actions is the next release task.
 
+Desktop automation: `.github/workflows/desktop-release.yml` builds Linux x86_64 and macOS installers and creates a draft GitHub Release. See [PACKAGING.md](../PACKAGING.md) for triggers and required Mac signing secrets. Public Mac distribution remains pending Developer ID signing and notarization; Windows packaging is not included yet.
+
 The release app identifier is `com.shirishkoirala.linkpad` for Android, iOS, macOS and Linux. Apple test targets use the `.RunnerTests` suffix. Earlier development identifiers are retired; mobile builds with this identifier install as a separate app and may require pairing again. Store records must use the new identifier.
 
 Mac, Linux, Android and iOS have had hands-on testing. Windows final testing is pending. These checks do not yet establish that every release scenario below has passed.

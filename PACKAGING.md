@@ -1,5 +1,34 @@
 # Desktop installers
 
+## GitHub Actions releases
+
+The **Desktop release** workflow builds Linux x86_64 and macOS installers on native runners, runs Go race tests/vet and Flutter analysis/tests, verifies package checksums, and attaches the installers to a **draft** GitHub Release. It never publishes a release automatically. Windows installers are not included yet.
+
+Run it from **Actions → Desktop release → Run workflow**, or push a tag such as `v0.1.0`. A tag must match the version in `mobile/pubspec.yaml` (without the `+build` suffix). Manual runs use the version from the selected source ref. Build both installers from the same approved commit.
+
+Artifacts also appear on the Actions run under `desktop-Linux` and `desktop-macOS`. Failed builds prevent the draft-release job. Reruns can replace assets in a draft, but refuse to overwrite a published release. When replacing a draft, remove any obsolete installer asset before publishing (for example, an old `macos-local.dmg` after signing is enabled).
+
+### Mac signing secrets
+
+For a public Mac installer, configure these repository secrets in **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_CERTIFICATE_BASE64` | Base64-encoded `.p12` export of your **Developer ID Application** certificate and private key |
+| `MACOS_CERTIFICATE_PASSWORD` | Password chosen when exporting the `.p12` |
+| `MACOS_SIGNING_IDENTITY` | Exact identity, e.g. `Developer ID Application: Shirish Koirala (TEAMID)` |
+| `APPLE_ID` | Apple Account email authorized to notarize the app |
+| `APPLE_TEAM_ID` | Apple Developer team ID |
+| `APPLE_APP_PASSWORD` | Apple app-specific password for notarization |
+
+An Apple Development or Apple Distribution certificate does not replace Developer ID Application signing. Export the Developer ID identity from Keychain Access, including its private key. Base64 is encoding, not encryption: put it directly into GitHub Secrets, never a tracked file or issue. Do not send credentials in chat.
+
+With all secrets configured, the workflow imports the identity into a temporary keychain and uses the existing signing/notarization packager. Missing parts of a signing configuration cause failure rather than a silent unsigned fallback. With **none** configured, the workflow produces the clearly labelled `macos-local.dmg` for testing only and warns in the draft notes. Configure signing and rerun before distributing a public Mac installer.
+
+### Final publication
+
+Verify downloaded checksums, test both installed apps and upgrades on physical computers, and confirm the Mac DMG is notarized. Edit the draft release notes, remove any local-testing installer, then click **Publish release**. Public installers can then be linked from the support page. Linux packages target Ubuntu 24.04 / Linux Mint 22-compatible x86_64 systems; other Linux distributions and Wayland input are not covered by this workflow.
+
 Run these commands from the repository root with Python 3.10 or newer.
 Generated installers and SHA-256 checksum files go into `bin/releases/`, which
 is already ignored by Git. Both installers include the Go server helper.
