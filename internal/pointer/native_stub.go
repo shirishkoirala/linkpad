@@ -1,4 +1,4 @@
-//go:build !linux && (!darwin || !cgo)
+//go:build !windows && !linux && (!darwin || !cgo)
 
 package pointer
 

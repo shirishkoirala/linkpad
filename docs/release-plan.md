@@ -15,6 +15,7 @@ Mac, Linux, Android and iOS have had hands-on testing. Windows final testing is 
 Known follow-ups:
 
 - [ ] Complete Windows testing and confirm the Windows build and installer are ready.
+- Windows Go input backend is implemented; see [Windows input](windows-input.md) for command-line use and Docker/Wine checks. Windows GUI/installer and physical Windows validation remain pending.
 - [ ] Investigate Linux volume controls. Media key mappings and Xfce shortcuts are present, but end-to-end operation is not verified. The requested Docker investigation is pending.
 - [ ] Confirm the smaller Android adaptive icon fits the launcher mask on the physical device.
 

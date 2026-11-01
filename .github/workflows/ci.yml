@@ -16,6 +16,11 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go test -race ./...
+      - name: Windows desktop input smoke test
+        if: runner.os == 'Windows'
+        run: go test -race ./internal/pointer -run TestWindowsNativeInputIntegration -v
+        env:
+          LINKPAD_WINDOWS_INTEGRATION: '1'
       - run: go vet ./...
       - run: go build ./cmd/linkpad
   stubs:

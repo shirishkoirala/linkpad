@@ -7,7 +7,7 @@ An MIT-licensed, local-first device connectivity experiment inspired by KDE Conn
 - Go peer identity persisted as an ECDSA P-256 self-signed certificate; TLS 1.3 WebSocket connections and explicit addresses.
 - Mutual TLS proof of identity, mandatory controller-side server fingerprint verification, a single-use 256-bit pairing secret with a two-minute window, persistent desktop trust, reconnect and capability negotiation.
 - An in-process plugin interface and registry. Pointer plugin available only when opted in and supported by the host.
-- Native macOS cursor movement and left/right click through CoreGraphics, gated by Accessibility permission. Linux X11 input uses a pure-Go authenticated XTEST connection for relative movement, clicks, wheel scrolling and arrow keys. Windows and macOS builds without cgo remain unavailable stubs.
+- Native macOS cursor movement and left/right click through CoreGraphics, gated by Accessibility permission. Linux X11 input uses a pure-Go authenticated XTEST connection for relative movement, clicks, wheel scrolling and arrow keys. Windows input uses SendInput in an interactive desktop session; see [Windows input](docs/windows-input.md). macOS builds without cgo remain unavailable stubs.
 - Flutter Android/iOS controller in `mobile/`, with shared pairing, certificate pinning, touchpad and foreground-only sessions. Flutter uses a software EC identity protected by platform secure storage.
 - Go integration/security tests, Flutter controller tests, protocol JSON Schema, CI and build instructions.
 

@@ -1,5 +1,9 @@
 # Validation record — 14 October 2026
 
+1 November 2026 update: the maintainer reported successful physical Windows testing of the command-line server's controls. An incorrect system clock initially caused pairing-code expiry; correcting the clock fixed pairing. Windows GUI and installer validation are separate work.
+
+Historical results below describe their original test dates. For current Windows backend verification, see [Windows input](docs/windows-input.md). As of 1 November 2026, portable Go race tests and Windows cross-builds pass; Linux Docker also passes the Go suite. Wine-native execution on the Apple Silicon host is blocked by a Rosetta GDT error before tests run. The new Windows CI smoke test is configured but has not been run remotely yet. Physical Windows validation and GUI/installer packaging remain pending.
+
 Local environment: macOS arm64, Go 1.26.5, JDK 17, Android SDK 35.
 
 ## Passed
