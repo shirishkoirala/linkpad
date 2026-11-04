@@ -13,4 +13,4 @@ Open http://localhost:8080. HTML, CSS and JavaScript require no package installa
 
 Deployment runs when site sources change on `master`, when a public release is published, or when manually dispatched. It reads the latest public GitHub release and generates download metadata. Local previews use `website/release.json` as the fallback. Images are copied from the existing release assets during staging.
 
-The mobile installation button currently links to the support page. Replace it with verified public store links when available. Keep platform requirements and signing guidance aligned with published installers.
+Mobile download buttons link to the App Store listing and Google Play package `com.shirishkoirala.linkpad`. Keep platform requirements and signing guidance aligned with published installers.
